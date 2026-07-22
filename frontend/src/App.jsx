@@ -17,7 +17,6 @@ export default function App() {
   const [runningPipeline, setRunningPipeline] = useState(false);
 
   const fetchData = async () => {
-    setLoading(true);
     try {
       const [ticketsRes, driftRes, auditRes] = await Promise.all([
         axios.get(`${API_BASE}/tickets`),
@@ -39,15 +38,30 @@ export default function App() {
     fetchData();
   }, []);
 
+  // Live polling while pipeline is running
+  useEffect(() => {
+    let interval = null;
+    if (runningPipeline) {
+      interval = setInterval(() => {
+        fetchData();
+      }, 3000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [runningPipeline]);
+
   const handleRunPipeline = async () => {
     setRunningPipeline(true);
     try {
       await axios.post(`${API_BASE}/pipeline/run`);
-      alert('SEBI & RBI Compliance Pipeline triggered in background.');
+      alert('SEBI & RBI Compliance Pipeline started! Tickets and drift scores will update live in the UI as agents process circulars.');
+      
+      // Auto stop running state after 30s
       setTimeout(() => {
         fetchData();
         setRunningPipeline(false);
-      }, 5000);
+      }, 30000);
     } catch (err) {
       alert('Error triggering pipeline. Check if backend is running on port 8000.');
       setRunningPipeline(false);

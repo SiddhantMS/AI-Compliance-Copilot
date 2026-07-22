@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import json
 import sqlite3
 import pandas as pd
@@ -12,11 +13,10 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(__file__))
 
 from db import get_connection, init_db
-from embeddings import search_similar
-from agents import run_agent_pipeline_on_circular
+from embeddings import search_similar, sync_db_to_chroma
+from agents import run_agent_pipeline_on_circular, process_all_queued_circulars_with_agents
 from ingestion import run_ingestion
 from processor import run_processing
-from embeddings import sync_db_to_chroma
 
 load_dotenv()
 
@@ -94,50 +94,95 @@ def get_tickets(
 
 @app.get("/api/drift")
 def get_drift_analytics():
-    """Retrieve drift score analytics and distribution metrics for SEBI and RBI."""
+    """Retrieve drift score analytics and distribution metrics for ALL circulars (tickets + archived)."""
     conn = get_connection()
     cursor = conn.cursor()
     
+    # 1. Fetch tickets
     cursor.execute("SELECT * FROM compliance_tickets WHERE regulator IN ('SEBI', 'RBI')")
-    rows = cursor.fetchall()
+    ticket_rows = cursor.fetchall()
+
+    # 2. Fetch all calculated drift scores from audit logs
+    cursor.execute("""
+        SELECT circular_id, details, timestamp FROM compliance_audit 
+        WHERE agent_name LIKE '%Policy Mapper%' AND action = 'Calculated Drift'
+        ORDER BY id DESC
+    """)
+    audit_rows = cursor.fetchall()
+
+    # 3. Fetch all queued circulars for title & regulator info
+    cursor.execute("SELECT id, regulator, title FROM document_queue")
+    circ_rows = cursor.fetchall()
     conn.close()
 
-    if not rows:
-        return {
-            "total_tickets": 0,
-            "avg_drift": 0.0,
-            "priority_counts": {"HIGH (P1)": 0, "MEDIUM (P2)": 0, "LOW (P3)": 0},
-            "regulator_counts": {"SEBI": 0, "RBI": 0},
-            "domain_scores": []
-        }
-
-    df = pd.DataFrame([dict(r) for r in rows])
-    
-    avg_drift = round(float(df["drift_score"].mean()), 4) if not df.empty else 0.0
-    high_count = int(len(df[df["priority"].str.contains("HIGH", na=False)]))
-    med_count = int(len(df[df["priority"].str.contains("MEDIUM", na=False)]))
-    low_count = int(len(df[df["priority"].str.contains("LOW", na=False)]))
-
-    sebi_count = int(len(df[df["regulator"] == "SEBI"]))
-    rbi_count = int(len(df[df["regulator"] == "RBI"]))
+    circ_dict = {str(c["id"]): {"regulator": c["regulator"], "title": c["title"]} for c in circ_rows}
 
     domain_scores = []
-    for idx, row in df.iterrows():
+    seen_circs = set()
+
+    for r in audit_rows:
+        circ_id = str(r["circular_id"])
+        if circ_id in seen_circs:
+            continue
+        seen_circs.add(circ_id)
+
+        details = r["details"]
+        # Parse details: Drift Score: 0.6185, Priority: MEDIUM (P2), Matched Policies: [...]
+        score_match = re.search(r'Drift Score:\s*([\d\.]+)', details)
+        prio_match = re.search(r'Priority:\s*([^,\n]+)', details)
+
+        drift_score = float(score_match.group(1)) if score_match else 0.0
+        priority = prio_match.group(1).strip() if prio_match else "Archive"
+        
+        info = circ_dict.get(circ_id, {"regulator": "SEBI", "title": f"Circular #{circ_id}"})
+        regulator = info["regulator"]
+        title = info["title"]
+
+        # Domain detection for display
+        lower = title.lower()
+        if "kyc" in lower or "aml" in lower:
+            domain = "KYC/AML"
+        elif "cyber" in lower or "security" in lower:
+            domain = "Cyber Security"
+        elif "grievance" in lower or "scores" in lower:
+            domain = "Grievance Redressal"
+        elif "lending" in lower or "loan" in lower or "penal" in lower:
+            domain = "Lending"
+        elif "deposit" in lower or "treasury" in lower:
+            domain = "Deposits"
+        else:
+            domain = "General BFSI"
+
         domain_scores.append({
-            "ticket_id": row["ticket_id"],
-            "domain": row["domain"],
-            "regulator": row["regulator"],
-            "drift_score": row["drift_score"],
-            "priority": row["priority"]
+            "circular_id": circ_id,
+            "title": title[:50] + ("..." if len(title) > 50 else ""),
+            "domain": domain,
+            "regulator": regulator,
+            "drift_score": drift_score,
+            "priority": priority
         })
 
+    # Total metrics calculation
+    all_scores = [d["drift_score"] for d in domain_scores]
+    avg_drift = round(float(sum(all_scores) / len(all_scores)), 4) if all_scores else 0.0
+    
+    high_count = sum(1 for d in domain_scores if "HIGH" in d["priority"])
+    med_count = sum(1 for d in domain_scores if "MEDIUM" in d["priority"])
+    low_count = sum(1 for d in domain_scores if "LOW" in d["priority"])
+    arch_count = sum(1 for d in domain_scores if "Archive" in d["priority"])
+
+    sebi_count = sum(1 for d in domain_scores if d["regulator"] == "SEBI")
+    rbi_count = sum(1 for d in domain_scores if d["regulator"] == "RBI")
+
     return {
-        "total_tickets": len(df),
+        "total_evaluated": len(domain_scores),
+        "total_tickets": len(ticket_rows),
         "avg_drift": avg_drift,
         "priority_counts": {
             "HIGH (P1)": high_count,
             "MEDIUM (P2)": med_count,
-            "LOW (P3)": low_count
+            "LOW (P3)": low_count,
+            "Archive": arch_count
         },
         "regulator_counts": {
             "SEBI": sebi_count,
@@ -147,7 +192,7 @@ def get_drift_analytics():
     }
 
 @app.get("/api/audit")
-def get_audit_trail(limit: int = 100):
+def get_audit_trail(limit: int = 200):
     """Retrieve RBI/SEBI inspectable audit log entries."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -183,11 +228,12 @@ def chat_ai(payload: ChatQuery):
 
 @app.post("/api/pipeline/run")
 def trigger_pipeline(background_tasks: BackgroundTasks):
-    """Trigger Layer 1 to Layer 4 pipeline execution for SEBI & RBI."""
+    """Trigger complete Layer 1 to Layer 4 pipeline execution for SEBI & RBI."""
     def run_full_pipeline():
         run_ingestion()
         run_processing()
         sync_db_to_chroma()
+        process_all_queued_circulars_with_agents()  # Execute LangGraph agents!
 
     background_tasks.add_task(run_full_pipeline)
     return {"status": "accepted", "message": "SEBI & RBI compliance pipeline triggered in background."}
