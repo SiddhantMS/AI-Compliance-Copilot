@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 import math
@@ -35,7 +36,7 @@ class OllamaOrFallbackEmbedder:
         try:
             url = f"{self.base_url}/api/embeddings"
             payload = {"model": self.model_name, "prompt": text_clean}
-            resp = requests.post(url, json=payload, timeout=5)
+            resp = requests.post(url, json=payload, timeout=3)
             if resp.status_code == 200:
                 emb = resp.json().get("embedding", [])
                 if len(emb) > 0:
@@ -43,7 +44,7 @@ class OllamaOrFallbackEmbedder:
         except Exception:
             pass
 
-        # 2. Fallback: Deterministic normalized feature vector (768-dim) for offline/standalone execution
+        # 2. Fallback: Deterministic normalized feature vector (768-dim)
         words = text_clean.lower().split()
         vector = np.zeros(768, dtype=np.float32)
         for idx, word in enumerate(words):
@@ -137,7 +138,6 @@ def search_similar(query_text: str, domain: str = None, top_k: int = 5) -> list[
         except Exception:
             results = None
 
-    # Fallback to full unfiltered search if no domain match or domain query yielded zero results
     if not results or not results.get("ids") or len(results["ids"][0]) == 0:
         results = coll_bank.query(
             query_embeddings=[query_emb],
@@ -152,7 +152,6 @@ def search_similar(query_text: str, domain: str = None, top_k: int = 5) -> list[
         metadatas = results.get("metadatas", [[]])[0]
 
         for idx in range(len(ids)):
-            # Cosine distance to similarity conversion: cosine_similarity = 1 - cosine_distance
             dist = distances[idx] if idx < len(distances) else 0.5
             similarity = max(0.0, min(1.0, 1.0 - dist if dist <= 1.0 else 1.0 / (1.0 + dist)))
             matched_chunks.append({
@@ -175,10 +174,8 @@ def calculate_drift(circular_text: str, matched_policy_chunks: list[dict]) -> fl
     if not matched_policy_chunks:
         return 0.0
 
-    # 1. Semantic Cosine Similarity (max similarity among top matched policy chunks)
     semantic_sim = max([c.get("similarity", 0.0) for c in matched_policy_chunks], default=0.0)
 
-    # 2. Keyword Match ratio
     circ_words = set(re.findall(r'\w+', circular_text.lower()))
     policy_words = set()
     for c in matched_policy_chunks:
@@ -194,7 +191,6 @@ def calculate_drift(circular_text: str, matched_policy_chunks: list[dict]) -> fl
     else:
         keyword_overlap = 0.0
 
-    # 3. Entity Match (spaCy NER) ratio
     nlp = get_nlp()
     circ_entities = set()
     policy_entities = set()
@@ -210,14 +206,16 @@ def calculate_drift(circular_text: str, matched_policy_chunks: list[dict]) -> fl
     if circ_entities:
         entity_overlap = len(circ_entities.intersection(policy_entities)) / len(circ_entities)
     else:
-        entity_overlap = keyword_overlap  # Fallback to keyword overlap if no NER entities found
+        entity_overlap = keyword_overlap
 
-    # Calculate weighted drift score formula:
-    # 0.60 * Semantic Similarity + 0.25 * Keyword Match + 0.15 * Entity Match
-    drift_score = (0.60 * semantic_sim) + (0.25 * keyword_overlap) + (0.15 * entity_overlap)
+    effective_sim = semantic_sim
+    if semantic_sim < 0.10 and (keyword_overlap > 0.25 or entity_overlap > 0.25):
+        effective_sim = max(keyword_overlap, entity_overlap)
+
+    drift_score = (0.60 * effective_sim) + (0.25 * keyword_overlap) + (0.15 * entity_overlap)
     drift_score = max(0.0, min(1.0, drift_score))
 
-    logger.info(f"Drift Calculation: Sim={semantic_sim:.3f}, Key={keyword_overlap:.3f}, Ent={entity_overlap:.3f} => Score={drift_score:.3f}")
+    logger.info(f"Drift Calculation: Sim={semantic_sim:.3f} (Eff={effective_sim:.3f}), Key={keyword_overlap:.3f}, Ent={entity_overlap:.3f} => Score={drift_score:.3f}")
     return round(float(drift_score), 4)
 
 if __name__ == "__main__":
@@ -225,7 +223,6 @@ if __name__ == "__main__":
     sync_res = sync_db_to_chroma()
     print("Vector Store Sync Result:", sync_res)
 
-    # Sanity check query
     results = search_similar("KYC re-KYC Video CIP procedures", domain="KYC/AML")
     print("\nSanity Check search_similar() Top Result:", results[0] if results else "None")
     

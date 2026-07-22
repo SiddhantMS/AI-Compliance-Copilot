@@ -6,7 +6,7 @@ from typing import TypedDict, Optional
 from dotenv import load_dotenv
 
 from langgraph.graph import StateGraph, END
-from langchain_community.llms import Ollama
+from langchain_ollama import OllamaLLM
 from langchain_core.prompts import PromptTemplate
 
 from db import get_connection, init_db, log_audit
@@ -97,7 +97,7 @@ def agent_policy_mapper(state: ComplianceState) -> ComplianceState:
     matched = search_similar(query_text=circ_text, domain=domain, top_k=5)
     drift_score = calculate_drift(circular_text=circ_text, matched_policy_chunks=matched)
 
-    # Determine Priority Thresholds
+    # Priority Thresholds
     if drift_score > 0.80:
         priority = "HIGH (P1)"
     elif drift_score >= 0.60:
@@ -177,9 +177,8 @@ Return JSON only:"""
     summary = ""
     change_list = []
 
-    # Attempt call to local Ollama via LangChain
     try:
-        llm = Ollama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0.2)
+        llm = OllamaLLM(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0.2)
         prompt = prompt_template.format(
             regulator=regulator,
             domain=domain,
@@ -191,7 +190,6 @@ Return JSON only:"""
         )
         response = llm.invoke(prompt)
         
-        # Try parsing JSON response
         parsed = None
         try:
             json_match = response[response.find("{"):response.rfind("}")+1]
@@ -203,7 +201,7 @@ Return JSON only:"""
             summary = parsed.get("summary", "")
             change_list = parsed.get("change_list", [])
         else:
-            summary = response.strip()[:500]
+            summary = str(response).strip()[:500]
             change_list = ["Review policy documentation", "Conduct compliance gap assessment", "Notify internal audit team"]
     except Exception as e:
         logger.warning(f"Ollama LLM call fallback: {e}")
@@ -221,7 +219,6 @@ Return JSON only:"""
 
     ticket_id = f"TICK-{uuid.uuid4().hex[:8].upper()}"
 
-    # Write compliance ticket to SQLite compliance_tickets table
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""

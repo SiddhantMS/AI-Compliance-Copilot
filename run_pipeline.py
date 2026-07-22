@@ -4,12 +4,14 @@ import json
 import logging
 from dotenv import load_dotenv
 
-# Add src/ to path
+# Add src/ and data/ to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "data"))
 
 from db import init_db
+from generate_sample_policies import generate_all_sample_bank_policies
 from ingestion import run_ingestion
-from processor import run_processing, generate_all_sample_bank_policies
+from processor import run_processing
 from embeddings import sync_db_to_chroma
 from agents import process_all_queued_circulars_with_agents
 
