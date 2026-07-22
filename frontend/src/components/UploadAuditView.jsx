@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileText, Printer, ShieldCheck, AlertTriangle, BookOpen, CheckCircle, RefreshCw } from 'lucide-react';
+import { Upload, FileText, Printer, ShieldCheck, AlertTriangle, BookOpen, CheckCircle, RefreshCw, AlertCircle, Clock, ShieldAlert } from 'lucide-react';
 import axios from 'axios';
 
 export default function UploadAuditView() {
@@ -234,6 +234,63 @@ export default function UploadAuditView() {
             </h4>
             <div style={{ fontSize: '0.92rem', color: '#E2E8F0', lineHeight: '1.6' }}>
               {report.summary}
+            </div>
+          </div>
+
+          {/* STRUCTURED EXECUTIVE RECOMMENDATIONS SECTION */}
+          <div style={{ marginBottom: '24px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#F8FAFC', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldAlert size={20} color="#EF4444" /> Recommended Executive Action Roadmap (SEBI & RBI Mandates)
+            </h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+              {/* High Priority Recommendations */}
+              <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.4)', borderTop: '4px solid #EF4444' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span className="badge badge-high">High Priority (P1)</span>
+                  <span style={{ fontSize: '0.75rem', color: '#F87171', fontWeight: 600 }}>15–30 Days SLA</span>
+                </div>
+                <ul style={{ paddingLeft: '16px', fontSize: '0.85rem', color: '#CBD5E1', lineHeight: '1.6' }}>
+                  <li style={{ marginBottom: '6px' }}>
+                    <strong>KYC & V-CIP Directives</strong>: Enforce 2-yr re-KYC for high risk accounts and 3-day CKYCR upload SLA.
+                  </li>
+                  <li>
+                    <strong>Cyber Resilience</strong>: Implement 24x7 SOC, MFA, and mandatory 6-hour incident reporting to CSIRT-Fin.
+                  </li>
+                </ul>
+              </div>
+
+              {/* Medium Priority Recommendations */}
+              <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.4)', borderTop: '4px solid #F59E0B' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span className="badge badge-medium">Medium Priority (P2)</span>
+                  <span style={{ fontSize: '0.75rem', color: '#FBBF24', fontWeight: 600 }}>45–60 Days SLA</span>
+                </div>
+                <ul style={{ paddingLeft: '16px', fontSize: '0.85rem', color: '#CBD5E1', lineHeight: '1.6' }}>
+                  <li style={{ marginBottom: '6px' }}>
+                    <strong>SCORES 2.0 Grievances</strong>: Integrate complaint tracking with SEBI 21-day resolution SLAs.
+                  </li>
+                  <li>
+                    <strong>Treasury Kill Switches</strong>: Deploy hardware/software order limit kill switches in trading terminals.
+                  </li>
+                </ul>
+              </div>
+
+              {/* Low Priority Recommendations */}
+              <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.4)', borderTop: '4px solid #6366F1' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span className="badge badge-low">Low Priority (P3)</span>
+                  <span style={{ fontSize: '0.75rem', color: '#A5B4FC', fontWeight: 600 }}>90 Days SLA</span>
+                </div>
+                <ul style={{ paddingLeft: '16px', fontSize: '0.85rem', color: '#CBD5E1', lineHeight: '1.6' }}>
+                  <li style={{ marginBottom: '6px' }}>
+                    <strong>Fair Lending Practices</strong>: Separate loan non-compliance penal charges from principal capitalization.
+                  </li>
+                  <li>
+                    <strong>Dormant Account Sweeper</strong>: Automate monthly 10-year dormant account transfers to DEA Fund.
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
 

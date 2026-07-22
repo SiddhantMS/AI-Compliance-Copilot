@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { AlertCircle, FileText, CheckCircle2, Search, Filter } from 'lucide-react';
+import { AlertCircle, FileText, CheckCircle2, Search, Filter, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function TicketsView({ tickets, loading }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [regulatorFilter, setRegulatorFilter] = useState('ALL');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
+  const [showRecommendations, setShowRecommendations] = useState(true);
 
   const filteredTickets = tickets.filter(t => {
     const matchesSearch = 
@@ -26,6 +27,59 @@ export default function TicketsView({ tickets, loading }) {
 
   return (
     <div>
+      {/* Executive Recommendations Summary Banner */}
+      <div className="glass-card" style={{ marginBottom: '20px', borderLeft: '5px solid #38BDF8' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setShowRecommendations(!showRecommendations)}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <ShieldAlert size={22} color="#38BDF8" />
+            <div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Master Executive Compliance Recommendations & Directives</h3>
+              <div style={{ fontSize: '0.8rem', color: '#94A3B8' }}>Actionable policy change roadmap for SEBI & RBI regulatory alignment</div>
+            </div>
+          </div>
+          <button style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}>
+            {showRecommendations ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </button>
+        </div>
+
+        {showRecommendations && (
+          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #334155', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+            <div style={{ background: '#0F172A', padding: '12px 14px', borderRadius: '8px', borderTop: '3px solid #EF4444' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span className="badge badge-high">P1 High Priority</span>
+                <span style={{ fontSize: '0.75rem', color: '#F87171' }}>15–30 Days SLA</span>
+              </div>
+              <ul style={{ paddingLeft: '14px', fontSize: '0.82rem', color: '#CBD5E1', lineHeight: '1.5' }}>
+                <li><strong>KYC & V-CIP</strong>: 2-yr re-KYC for high risk & 3-day CKYCR upload SLA.</li>
+                <li><strong>Cyber Security</strong>: 24x7 SOC, MFA, and 6-hour incident reporting to CSIRT-Fin.</li>
+              </ul>
+            </div>
+
+            <div style={{ background: '#0F172A', padding: '12px 14px', borderRadius: '8px', borderTop: '3px solid #F59E0B' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span className="badge badge-medium">P2 Medium Priority</span>
+                <span style={{ fontSize: '0.75rem', color: '#FBBF24' }}>45–60 Days SLA</span>
+              </div>
+              <ul style={{ paddingLeft: '14px', fontSize: '0.82rem', color: '#CBD5E1', lineHeight: '1.5' }}>
+                <li><strong>SCORES 2.0 Grievances</strong>: Integrate complaint tracking with SEBI 21-day SLAs.</li>
+                <li><strong>Treasury Kill Switches</strong>: Deploy order limit kill switches in trading terminals.</li>
+              </ul>
+            </div>
+
+            <div style={{ background: '#0F172A', padding: '12px 14px', borderRadius: '8px', borderTop: '3px solid #6366F1' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span className="badge badge-low">P3 Low Priority</span>
+                <span style={{ fontSize: '0.75rem', color: '#A5B4FC' }}>90 Days SLA</span>
+              </div>
+              <ul style={{ paddingLeft: '14px', fontSize: '0.82rem', color: '#CBD5E1', lineHeight: '1.5' }}>
+                <li><strong>Fair Lending</strong>: Separate loan non-compliance charges from principal capitalization.</li>
+                <li><strong>Dormant Accounts</strong>: Automate monthly 10-year dormant sweeps to DEA Fund.</li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Top Metrics Row */}
       <div className="metrics-grid">
         <div className="glass-card">

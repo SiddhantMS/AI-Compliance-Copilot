@@ -328,6 +328,21 @@ async def audit_internal_policy(
         f"Overall Assessment: {risk_level}."
     )
 
+    action_recommendations = {
+        "p1_high": [
+            "KYC V-CIP & Re-KYC: Enforce 2-yr re-KYC for high-risk accounts & 3-day CKYCR upload SLA.",
+            "Cyber Incident SLA: Implement mandatory 6-hour cybersecurity incident reporting to CSIRT-Fin/RBI."
+        ],
+        "p2_medium": [
+            "SCORES 2.0 Grievance Escalation: Integrate complaint tracking with SEBI 21-day SLAs.",
+            "Treasury Kill Switches: Configure hardware/software order limit kill switches in trading terminals."
+        ],
+        "p3_low": [
+            "Fair Lending Penal Charges: Separate loan non-compliance charges from principal capitalization.",
+            "Dormant Account Sweeper: Automate monthly 10-year dormant account sweeps to DEA Fund."
+        ]
+    }
+
     action_items = [
         f"Review internal policy clauses against matched {matched_regulations[0]['regulator'] if matched_regulations else 'SEBI/RBI'} circular provisions.",
         "Formulate internal compliance task force to update mandatory operational controls.",
@@ -351,6 +366,7 @@ async def audit_internal_policy(
         "risk_level": risk_level,
         "summary": summary,
         "matched_regulations": matched_regulations,
+        "action_recommendations": action_recommendations,
         "action_items": action_items,
         "word_count": len(re.findall(r'\w+', extracted_text))
     }
