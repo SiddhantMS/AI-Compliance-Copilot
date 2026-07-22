@@ -258,7 +258,8 @@ async def audit_internal_policy(
             f.write(await file.read())
 
         if file.filename.lower().endswith(".pdf"):
-            extracted_text = extract_text_from_pdf(temp_path)
+            pdf_res = extract_text_from_pdf(temp_path)
+            extracted_text = pdf_res[0] if isinstance(pdf_res, tuple) else pdf_res
         else:
             with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
                 extracted_text = f.read()
@@ -272,7 +273,6 @@ async def audit_internal_policy(
     if not extracted_text:
         raise HTTPException(status_code=400, detail="Please upload a PDF/text file or provide policy text.")
 
-    # Compare against ingested SEBI and RBI regulations stored in ChromaDB or SQLite
     client = get_chroma_client()
     try:
         coll_sebi = client.get_collection(name="sebi_circulars")
@@ -307,7 +307,6 @@ async def audit_internal_policy(
                 "similarity": round(float(similarity), 4)
             })
 
-    # Compute Policy Drift Score
     drift_score = calculate_drift(extracted_text, matched_regulations)
 
     if drift_score >= 0.80:
