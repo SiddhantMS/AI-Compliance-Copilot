@@ -27,6 +27,9 @@ def calculate_sha256(content: str) -> str:
 
 def insert_to_queue(regulator: str, source: str, title: str, content: str) -> bool:
     """Insert document into document_queue if not duplicate. Returns True if inserted."""
+    if regulator not in ["SEBI", "RBI"]:
+        return False
+
     sha256_hash = calculate_sha256(content)
     conn = get_connection()
     cursor = conn.cursor()
@@ -56,29 +59,29 @@ def ingest_sebi() -> dict:
 
     sample_sebi_circulars = [
         {
-            "title": "Master Direction – Know Your Customer (KYC) Direction, Video-CIP & CKYCR (SEBI/RBI 2026)",
+            "title": "Master Direction – Know Your Customer (KYC) Direction, Video-CIP & CKYCR (SEBI 2026)",
             "source": "https://www.sebi.gov.in/legal/circulars/feb-2026/kyc-direction.html",
-            "content": "Mandatory Video-based Customer Identification Process (V-CIP), periodic re-KYC update every 2 years for high risk accounts, 8 years for medium risk, and 10 years for low risk. Central KYC Records Registry (CKYCR) uploading within 3 days of account opening. Beneficial ownership threshold fixed at 10%."
+            "content": "SEBI circular mandating Video-based Customer Identification Process (V-CIP), periodic re-KYC update every 2 years for high risk accounts, 8 years for medium risk, and 10 years for low risk. Central KYC Records Registry (CKYCR) uploading within 3 days of account opening. Beneficial ownership threshold fixed at 10%."
         },
         {
             "title": "Cybersecurity and Cyber Resilience Framework for Stock Brokers & Financial Institutions - SEBI 2026",
             "source": "https://www.sebi.gov.in/legal/circulars/feb-2026/cyber-security.html",
-            "content": "Mandates mandatory 24x7 SOC operations, multi-factor authentication (MFA) for trading portals, zero-trust network architecture, quarterly vulnerability assessment and penetration testing (VAPT), offline immutable backups, and immediate reporting of cyber incidents within 6 hours."
+            "content": "SEBI mandates 24x7 SOC operations, multi-factor authentication (MFA) for trading portals, zero-trust network architecture, quarterly vulnerability assessment and penetration testing (VAPT), offline immutable backups, and immediate reporting of cyber incidents within 6 hours."
         },
         {
             "title": "Investor Grievance Redressal Mechanism via SCORES 2.0 and Ombudsman Integration - SEBI 2026",
             "source": "https://www.sebi.gov.in/legal/circulars/feb-2026/scores.html",
-            "content": "Updating SCORES 2.0 resolution timelines. All registered intermediaries must address investor complaints within 21 calendar days, register unique complaint ticket IDs, and integrate escalation to Internal Ombudsman within 30 days."
+            "content": "SEBI circular updating SCORES 2.0 resolution timelines. All registered intermediaries must address investor complaints within 21 calendar days, register unique complaint ticket IDs, and integrate escalation to Internal Ombudsman within 30 days."
         },
         {
-            "title": "Fair Lending Practice – Penal Charges in Loan Accounts & Interest Rate Reset - RBI/SEBI 2026",
+            "title": "Fair Lending Practice – Penal Charges in Loan Accounts & Interest Rate Reset - SEBI 2026",
             "source": "https://www.sebi.gov.in/legal/circulars/jan-2026/penal-charges.html",
-            "content": "Penalty for non-compliance of loan contract terms shall be levied as penal charges rather than penal interest rate. No capitalization of penal charges permitted. Benchmark linked interest rate resets must be audited quarterly."
+            "content": "SEBI guidance specifying penalty for non-compliance of loan contract terms shall be levied as penal charges rather than penal interest rate. No capitalization of penal charges permitted. Benchmark linked interest rate resets must be audited quarterly."
         },
         {
             "title": "Deposit and Treasury Risk Management - Unclaimed Deposits & Algo Kill Switches - SEBI 2026",
             "source": "https://www.sebi.gov.in/legal/circulars/feb-2026/treasury-risk.html",
-            "content": "Unclaimed deposits dormant for over 10 years must be transferred to Depositor Education and Awareness (DEA) Fund. Algorithmic trading and treasury execution APIs must maintain strict order rate limits and automated kill switches."
+            "content": "SEBI circular mandating unclaimed deposits dormant for over 10 years must be transferred to Depositor Education and Awareness (DEA) Fund. Algorithmic trading and treasury execution APIs must maintain strict order rate limits and automated kill switches."
         }
     ]
 
@@ -141,61 +144,58 @@ def ingest_rbi() -> dict:
         else:
             skipped += 1
 
+    rbi_success = False
+    for url in rbi_urls:
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=5)
+            if resp.status_code == 200:
+                if "captcha" not in resp.text.lower():
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    links = soup.find_all("a", href=True)
+                    circular_links = [l for l in links if "notification" in l["href"].lower() or "circular" in l["href"].lower()]
+                    if circular_links:
+                        rbi_success = True
+                        for link_tag in circular_links[:10]:
+                            title = link_tag.get_text(strip=True) or "RBI Notification"
+                            href = link_tag["href"]
+                            full_url = href if href.startswith("http") else f"https://www.rbi.org.in/{href.lstrip('/')}"
+                            content = f"RBI Regulation: {title}. Full notification details available at {full_url}"
+                            if insert_to_queue("RBI", full_url, title, content):
+                                fetched += 1
+                            else:
+                                skipped += 1
+                        break
+        except Exception as e:
+            logger.warning(f"RBI Ingestion attempt failed ({url}): {e}")
+
     logger.info(f"RBI Ingestion Summary: {fetched} fetched/queued, {skipped} duplicates skipped.")
     return {"regulator": "RBI", "fetched": fetched, "skipped": skipped}
 
-def ingest_folder(regulator: str, folder_path: str) -> dict:
-    """Ingest PDFs dropped in folder (IRDAI / PFRDA)."""
-    os.makedirs(folder_path, exist_ok=True)
-    pdf_files = glob.glob(os.path.join(folder_path, "*.pdf")) + glob.glob(os.path.join(folder_path, "*.txt"))
-    fetched = 0
-    skipped = 0
-
-    for file_path in pdf_files:
-        filename = os.path.basename(file_path)
-        try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            if not content.strip():
-                content = f"{regulator} document content from file {filename}"
-            title = f"{regulator} Circular - {filename}"
-            if insert_to_queue(regulator, file_path, title, content):
-                fetched += 1
-            else:
-                skipped += 1
-        except Exception as e:
-            logger.error(f"Error reading file {file_path}: {e}")
-
-    logger.info(f"{regulator} Folder Ingestion ({folder_path}): {fetched} fetched/queued, {skipped} duplicates skipped.")
-    return {"regulator": regulator, "fetched": fetched, "skipped": skipped}
-
 def run_ingestion() -> dict:
-    """Orchestrate Layer 1 ingestion from all four sources."""
+    """Orchestrate Layer 1 ingestion strictly for SEBI and RBI."""
     init_db()
-    logger.info("=== Starting Layer 1 Data Ingestion Pipeline ===")
+    logger.info("=== Starting Layer 1 Data Ingestion Pipeline (SEBI & RBI Exclusive) ===")
     sebi_res = ingest_sebi()
     rbi_res = ingest_rbi()
-    irdai_res = ingest_folder("IRDAI", os.getenv("IRDAI_DIR", "data/irdai"))
-    pfrda_res = ingest_folder("PFRDA", os.getenv("PFRDA_DIR", "data/pfrda"))
 
-    total_queued = sebi_res["fetched"] + rbi_res["fetched"] + irdai_res["fetched"] + pfrda_res["fetched"]
-    total_skipped = sebi_res["skipped"] + rbi_res["skipped"] + irdai_res["skipped"] + pfrda_res["skipped"]
+    total_queued = sebi_res["fetched"] + rbi_res["fetched"]
+    total_skipped = sebi_res["skipped"] + rbi_res["skipped"]
 
     summary = {
         "status": "success",
         "total_queued": total_queued,
         "total_skipped": total_skipped,
-        "details": [sebi_res, rbi_res, irdai_res, pfrda_res]
+        "details": [sebi_res, rbi_res]
     }
     logger.info(f"=== Layer 1 Complete: {total_queued} new queued, {total_skipped} skipped ===")
     return summary
 
 def start_scheduler():
-    """Start APScheduler for periodic ingestion polling."""
+    """Start APScheduler for periodic ingestion polling (SEBI & RBI)."""
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_ingestion, 'interval', minutes=30)
     scheduler.start()
-    logger.info("APScheduler started: Ingestion polling active every 30 minutes.")
+    logger.info("APScheduler started: SEBI & RBI polling active every 30 minutes.")
     return scheduler
 
 if __name__ == "__main__":
