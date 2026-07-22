@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("agents")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1:8b")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:14b")
 
 class ComplianceState(TypedDict):
     circular_id: str
