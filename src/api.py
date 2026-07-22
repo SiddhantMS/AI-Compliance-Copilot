@@ -19,6 +19,7 @@ from agents import run_agent_pipeline_on_circular, process_all_queued_circulars_
 from ingestion import run_ingestion
 from processor import run_processing, extract_text_from_pdf
 from generate_sample_policies import generate_all_sample_bank_policies
+from evaluation import run_ragas_evaluation
 
 load_dotenv()
 
@@ -198,6 +199,16 @@ def get_audit_trail(limit: int = 200):
 
     logs = [dict(r) for r in rows]
     return {"count": len(logs), "logs": logs}
+
+@app.get("/api/evaluation")
+def get_evaluation():
+    """Retrieve current RAGAS framework evaluation metrics."""
+    return run_ragas_evaluation()
+
+@app.post("/api/evaluation/run")
+def trigger_evaluation():
+    """Execute RAGAS evaluation benchmark over regulatory test set."""
+    return run_ragas_evaluation()
 
 @app.post("/api/chat")
 def chat_ai(payload: ChatQuery):

@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import TicketsView from './components/TicketsView';
 import DriftView from './components/DriftView';
 import UploadAuditView from './components/UploadAuditView';
+import EvaluationView from './components/EvaluationView';
 import AuditView from './components/AuditView';
 import ChatView from './components/ChatView';
 
@@ -80,6 +81,7 @@ export default function App() {
         {activeTab === 'tickets' && <TicketsView tickets={tickets} loading={loading} />}
         {activeTab === 'drift' && <DriftView analytics={analytics} />}
         {activeTab === 'upload' && <UploadAuditView />}
+        {activeTab === 'evaluation' && <EvaluationView />}
         {activeTab === 'audit' && <AuditView auditLogs={auditLogs} loading={loading} />}
         {activeTab === 'chat' && <ChatView />}
       </main>

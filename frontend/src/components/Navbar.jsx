@@ -33,6 +33,9 @@ export default function Navbar({ activeTab, setActiveTab, onRunPipeline, running
           <button className={`tab-btn ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => setActiveTab('upload')}>
             📤 Audit Policy & Print
           </button>
+          <button className={`tab-btn ${activeTab === 'evaluation' ? 'active' : ''}`} onClick={() => setActiveTab('evaluation')}>
+            🧪 RAGAS Evaluation
+          </button>
           <button className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>
             📜 Audit Trail
           </button>
