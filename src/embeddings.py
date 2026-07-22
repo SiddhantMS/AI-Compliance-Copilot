@@ -22,21 +22,36 @@ RERANKER_MODEL_NAME = os.getenv("RERANKER_MODEL_NAME", "BAAI/bge-reranker-large"
 VECTORSTORE_DIR = os.path.join(os.path.dirname(__file__), "..", "vectorstore")
 os.makedirs(VECTORSTORE_DIR, exist_ok=True)
 
+# Check sentence_transformers availability ONCE at module load
+_ST_AVAILABLE = False
+try:
+    import sentence_transformers  # noqa: F401
+    _ST_AVAILABLE = True
+    logger.info("sentence_transformers available — BAAI models will be used.")
+except ImportError:
+    logger.info("sentence_transformers not installed. Using Ollama nomic-embed-text + fallback vectorizer. "
+                "Install with: pip install sentence-transformers")
+
 class BGAE1024OrFallbackEmbedder:
-    """BAAI/bge-large-en-v1.5 Embedder with Ollama & 768-dim ChromaDB compatible vectorizer fallback."""
+    """BAAI/bge-large-en-v1.5 Embedder with nomic-embed-text (Ollama) and deterministic 768-dim fallback."""
     def __init__(self, model_name: str = EMBEDDER_MODEL_NAME):
         self.model_name = model_name
         self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
         self._st_model = None
+        self._initialized = False
 
     def _get_st_model(self):
-        if self._st_model is None:
-            try:
-                from sentence_transformers import SentenceTransformer
-                self._st_model = SentenceTransformer(self.model_name)
-                logger.info(f"Loaded SentenceTransformer model: {self.model_name}")
-            except Exception as e:
-                logger.warning(f"Could not load SentenceTransformer ({self.model_name}): {e}. Using Ollama/Fallback engine.")
+        if not self._initialized:
+            self._initialized = True
+            if _ST_AVAILABLE:
+                try:
+                    from sentence_transformers import SentenceTransformer
+                    self._st_model = SentenceTransformer(self.model_name)
+                    logger.info(f"Loaded SentenceTransformer: {self.model_name}")
+                except Exception as e:
+                    logger.info(f"SentenceTransformer load failed: {e}. Using Ollama fallback.")
+                    self._st_model = "fallback"
+            else:
                 self._st_model = "fallback"
         return self._st_model
 
@@ -53,17 +68,20 @@ class BGAE1024OrFallbackEmbedder:
             except Exception:
                 pass
 
+        # Try Ollama nomic-embed-text (actually installed)
         try:
             import requests
             response = requests.post(
                 f"{self.ollama_url}/api/embeddings",
-                json={"model": "bge-large", "prompt": text_clean},
-                timeout=3
+                json={"model": "nomic-embed-text", "prompt": text_clean},
+                timeout=10
             )
             if response.status_code == 200:
                 emb = response.json().get("embedding", [])
-                if len(emb) >= 768:
-                    return emb[:768]
+                if emb:
+                    if len(emb) >= 768:
+                        return emb[:768]
+                    return emb + [0.0] * (768 - len(emb))
         except Exception:
             pass
 
@@ -88,15 +106,20 @@ class BGAEReranker:
     def __init__(self, model_name: str = RERANKER_MODEL_NAME):
         self.model_name = model_name
         self._cross_encoder = None
+        self._initialized = False
 
     def _get_encoder(self):
-        if self._cross_encoder is None:
-            try:
-                from sentence_transformers import CrossEncoder
-                self._cross_encoder = CrossEncoder(self.model_name)
-                logger.info(f"Loaded BAAI CrossEncoder reranker: {self.model_name}")
-            except Exception as e:
-                logger.warning(f"Could not load CrossEncoder ({self.model_name}): {e}. Using term alignment fallback.")
+        if not self._initialized:
+            self._initialized = True
+            if _ST_AVAILABLE:
+                try:
+                    from sentence_transformers import CrossEncoder
+                    self._cross_encoder = CrossEncoder(self.model_name)
+                    logger.info(f"Loaded BAAI CrossEncoder reranker: {self.model_name}")
+                except Exception as e:
+                    logger.info(f"CrossEncoder load failed: {e}. Using term alignment fallback.")
+                    self._cross_encoder = "fallback"
+            else:
                 self._cross_encoder = "fallback"
         return self._cross_encoder
 

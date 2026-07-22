@@ -85,7 +85,7 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("System Status")
 st.sidebar.success("● Database: Connected (SQLite)")
 st.sidebar.info("● Vector Store: Active (ChromaDB)")
-st.sidebar.info("● Ollama LLM: llama3.1:8b")
+st.sidebar.info("● Ollama LLM: Qwen 2.5 14B")
 
 # Helper Data Functions
 def fetch_tickets():
@@ -260,35 +260,197 @@ elif nav_view == "📜 RBI Audit Trail":
 # VIEW 4: ASK AI (RAG CHATBOT)
 # ---------------------------------------------------------
 elif nav_view == "💬 Ask AI (RAG Chatbot)":
-    st.markdown('<div class="main-header">Ask AI — Regulatory Assistant</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">RAG Chatbot over SEBI circulars and Bank of India policy vector stores</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">💬 Ask AI — Regulatory Assistant</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Powered by Qwen 2.5 + Hybrid RAG (ChromaDB × BM25) over SEBI circulars and Bank of India policies</div>', unsafe_allow_html=True)
+    import requests as _requests
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+    # ── Custom Chat UI Styles ──
+    st.markdown("""
+    <style>
+        .chat-container { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+        .user-bubble {
+            background: linear-gradient(135deg, #1E3A8A, #2563EB);
+            color: white;
+            padding: 12px 18px;
+            border-radius: 18px 18px 4px 18px;
+            max-width: 78%;
+            align-self: flex-end;
+            margin-left: auto;
+            font-size: 0.95rem;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.3);
+        }
+        .bot-bubble {
+            background: #F1F5F9;
+            color: #1E293B;
+            padding: 14px 18px;
+            border-radius: 18px 18px 18px 4px;
+            max-width: 85%;
+            align-self: flex-start;
+            font-size: 0.95rem;
+            border-left: 4px solid #3B82F6;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            line-height: 1.6;
+        }
+        .bot-label { font-size: 0.75rem; color: #6B7280; margin-bottom: 4px; font-weight: 600; }
+        .user-label { font-size: 0.75rem; color: #93C5FD; margin-bottom: 4px; font-weight: 600; text-align: right; }
+        .source-badge {
+            display: inline-block;
+            background: #EFF6FF;
+            color: #1D4ED8;
+            border: 1px solid #BFDBFE;
+            border-radius: 8px;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+            margin: 2px;
+        }
+        .chat-input-area {
+            position: sticky;
+            bottom: 0;
+            background: white;
+            padding-top: 12px;
+            border-top: 1px solid #E2E8F0;
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
-    user_query = st.text_input("Ask any question regarding SEBI/RBI circulars or Bank of India policies:", placeholder="e.g. What is the re-KYC frequency required for high risk bank accounts?")
+    st.markdown("---")
 
-    if st.button("Search & Answer", type="primary") and user_query:
-        with st.spinner("Searching ChromaDB collections & generating response..."):
-            matched_policies = search_similar(query_text=user_query, top_k=3)
-            
-            context_str = "\n\n".join([f"Source [{m.get('doc_name')} | Sim: {m.get('similarity')}]: {m.get('text')}" for m in matched_policies])
+    # ── Chat History Display ──
+    if not st.session_state.get("chat_history"):
+        st.info("👋 Hello! I'm your AI Compliance Assistant. Ask me anything about SEBI/RBI regulations, Bank of India policies, KYC norms, reporting timelines, penalties, or any compliance topic.")
+    else:
+        for chat in st.session_state.chat_history:
+            # User bubble
+            st.markdown(f"""
+            <div class="chat-container">
+                <div>
+                    <div class="user-label">👤 You</div>
+                    <div class="user-bubble">{chat['query']}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            # Response synthesis
-            answer = f"Based on Bank of India policies and regulatory circulars:\n\n"
-            if matched_policies:
-                answer += f"**Key Finding**: {matched_policies[0].get('text')}\n\n"
-                answer += f"**Relevant Policy Document**: `{matched_policies[0].get('doc_name')}` (Cosine Similarity: {matched_policies[0].get('similarity')})"
-            else:
-                answer += "No exact matching policy chunk found in vector store."
+            # Bot bubble
+            st.markdown(f"""
+            <div class="chat-container">
+                <div>
+                    <div class="bot-label">🤖 Compliance AI (Qwen 2.5)</div>
+                    <div class="bot-bubble">{chat['answer'].replace(chr(10), '<br>')}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            st.session_state.chat_history.append({"query": user_query, "answer": answer, "sources": matched_policies})
+            # Sources expander
+            if chat.get("sources"):
+                with st.expander(f"📚 View {len(chat['sources'])} retrieved source document(s)", expanded=False):
+                    for i, s in enumerate(chat["sources"], 1):
+                        st.markdown(f"**[{i}] {s.get('doc_name', 'Document')}** — Domain: `{s.get('domain', 'N/A')}` | Similarity: `{s.get('similarity', 0)}`")
+                        st.caption(s.get("text", "")[:400] + ("..." if len(s.get("text", "")) > 400 else ""))
+                        if i < len(chat["sources"]):
+                            st.divider()
 
-    for chat in reversed(st.session_state.chat_history):
-        st.markdown(f"**👤 User**: {chat['query']}")
-        st.markdown(f"**🤖 Copilot**: {chat['answer']}")
-        with st.expander("🔍 View Retrieved Vector Store Context"):
-            for s in chat.get("sources", []):
-                st.caption(f"📄 **{s.get('doc_name')}** (Domain: {s.get('domain')}, Sim: {s.get('similarity')})")
-                st.code(s.get("text"))
-        st.markdown("---")
+            st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Input Area ──
+    st.markdown('<div class="chat-input-area">', unsafe_allow_html=True)
+    col_input, col_btn, col_clear = st.columns([7, 1.2, 1.2])
+
+    with col_input:
+        user_query = st.text_input(
+            label="chat_input",
+            label_visibility="collapsed",
+            placeholder="💬 Ask me anything — regulations, compliance, finance, or anything else...",
+            key="chat_input_box"
+        )
+    with col_btn:
+        send_clicked = st.button("Send 🚀", type="primary", use_container_width=True)
+    with col_clear:
+        if st.button("Clear 🗑️", use_container_width=True):
+            st.session_state.chat_history = []
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Handle Send ──
+    if (send_clicked or user_query) and user_query and user_query.strip():
+        # Prevent duplicate sends
+        last_query = st.session_state.chat_history[-1]["query"] if st.session_state.chat_history else ""
+        if user_query.strip() != last_query:
+            with st.spinner("🔍 Searching regulations & generating answer with Qwen 2.5..."):
+                try:
+                    # Call the FastAPI backend (which runs the full RAG + LLM pipeline)
+                    api_payload = {
+                        "query": user_query.strip(),
+                        "regulator": "ALL",
+                        "chat_history": [
+                            {"query": c["query"], "answer": c["answer"]}
+                            for c in st.session_state.chat_history[-4:]
+                        ]
+                    }
+                    resp = _requests.post(
+                        "http://localhost:8001/api/chat",
+                        json=api_payload,
+                        timeout=120
+                    )
+
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        answer = data.get("answer", "No response received.")
+                        sources = data.get("sources", [])
+                    else:
+                        answer = f"⚠️ API error (HTTP {resp.status_code}). Please ensure the FastAPI server is running on port 8000."
+                        sources = []
+
+                except _requests.exceptions.ConnectionError:
+                    # Fallback: call directly via search_similar + LLM if API is down
+                    try:
+                        from langchain_ollama import OllamaLLM
+                        from langchain_core.prompts import PromptTemplate
+
+                        matched = search_similar(query_text=user_query.strip(), top_k=5)
+                        context_str = "\n\n".join([
+                            f"[{i+1}] {m.get('doc_name','Doc')}: {m.get('text','')}"
+                            for i, m in enumerate(matched[:4])
+                        ]) if matched else "No documents found."
+
+                        history_str = "\n".join([
+                            f"User: {c['query']}\nAssistant: {c['answer']}"
+                            for c in st.session_state.chat_history[-3:]
+                        ]) or "No previous conversation."
+
+                        prompt = f"""You are a helpful, knowledgeable AI assistant. You are also an expert in Indian banking regulations (SEBI, RBI), compliance, and finance.
+
+Regulatory Context (use only if relevant):
+{context_str}
+
+Conversation History:
+{history_str}
+
+User: {user_query.strip()}
+
+Instructions:
+- Answer the question directly and conversationally.
+- If it's a greeting, respond warmly and introduce yourself.
+- If it's compliance/regulatory, use the context above and be specific.
+- If it's a general question, answer from your knowledge.
+- NEVER say "I don't know" or refuse. Always give a useful response.
+- Keep answers concise unless asked for detail.
+
+Assistant:"""
+                        llm_model = os.getenv("LLM_MODEL", "qwen2.5:14b")
+                        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+                        llm = OllamaLLM(model=llm_model, base_url=ollama_url, temperature=0.3)
+                        answer = llm.invoke(prompt).strip()
+                        sources = matched
+                    except Exception as llm_err:
+                        answer = f"⚠️ Could not reach the AI backend. Error: {llm_err}"
+                        sources = []
+                except Exception as e:
+                    answer = f"⚠️ Unexpected error: {str(e)}"
+                    sources = []
+
+            st.session_state.chat_history.append({
+                "query": user_query.strip(),
+                "answer": answer,
+                "sources": sources
+            })
+            st.rerun()

@@ -2,6 +2,7 @@ import os
 import sys
 import re
 import json
+import logging
 import sqlite3
 import pandas as pd
 from typing import Optional, List
@@ -9,6 +10,9 @@ from fastapi import FastAPI, Query, HTTPException, BackgroundTasks, File, Upload
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from langchain_ollama import OllamaLLM
+from langchain_core.prompts import PromptTemplate
+import requests as _http
 
 sys.path.append(os.path.dirname(__file__))
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
@@ -39,9 +43,58 @@ app.add_middleware(
 
 init_db()
 
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1:latest")
+
+def get_available_ollama_model():
+    """Auto-detect the best available Ollama model. Returns the configured model if available, else first text model found."""
+    import requests as _req
+    try:
+        resp = _req.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        if resp.status_code == 200:
+            models = [m["name"] for m in resp.json().get("models", [])]
+            # Filter out embedding-only models
+            text_models = [m for m in models if "embed" not in m.lower()]
+            if LLM_MODEL in text_models:
+                return LLM_MODEL
+            elif text_models:
+                logger_api = logging.getLogger("api")
+                logger_api.warning(f"Configured model '{LLM_MODEL}' not found. Using '{text_models[0]}' instead.")
+                return text_models[0]
+    except Exception:
+        pass
+    return LLM_MODEL  # fallback to configured even if check fails
+
+CHAT_PROMPT_TEMPLATE = PromptTemplate(
+    input_variables=["context", "chat_history", "question"],
+    template="""You are a helpful, knowledgeable AI assistant. You are also an expert in Indian banking regulations (SEBI, RBI, IRDAI, PFRDA), compliance, finance, and general topics.
+
+You have been given some regulatory document excerpts as extra context below. Use them ONLY if they are relevant to the question. If the question is general (like greetings, math, coding, history, etc.), just answer it naturally without mentioning the documents.
+
+Regulatory Context (use only if relevant):
+{context}
+
+Conversation History:
+{chat_history}
+
+User: {question}
+
+Instructions:
+- Answer the question directly and conversationally.
+- If it's a greeting like "hi" or "hello", respond warmly and introduce yourself briefly.
+- If it's a compliance/regulatory question, use the context above and be specific.
+- If it's a general question (coding, math, science, history, etc.), answer from your knowledge.
+- NEVER say "I don't know" or refuse to answer. Always give a useful response.
+- Keep answers concise unless the user asks for detail.
+- Do NOT mention "context" or "documents" unless the user asks about sources.
+
+Assistant:"""
+)
+
 class ChatQuery(BaseModel):
     query: str
     regulator: Optional[str] = "ALL"
+    chat_history: Optional[List[dict]] = []
 
 @app.get("/")
 def read_root():
@@ -212,25 +265,102 @@ def trigger_evaluation():
 
 @app.post("/api/chat")
 def chat_ai(payload: ChatQuery):
-    """RAG Chatbot query endpoint searching ChromaDB and synthesizing response."""
+    """RAG Chatbot: retrieves ChromaDB context and generates a real LLM answer via Ollama."""
+    logger_chat = logging.getLogger("chat")
     user_query = payload.query.strip()
     if not user_query:
         raise HTTPException(status_code=400, detail="Query string cannot be empty")
 
-    matched_chunks = search_similar(query_text=user_query, top_k=4)
+    # Step 1: Retrieve relevant context chunks from ChromaDB
+    matched_chunks = search_similar(query_text=user_query, top_k=5)
 
-    answer = "Based on Bank of India master policies and SEBI/RBI regulatory directions:\n\n"
+    # Step 2: Build context string (only if relevant chunks found)
     if matched_chunks:
-        top_match = matched_chunks[0]
-        answer += f"**Key Compliance Guidance**: {top_match.get('text')}\n\n"
-        answer += f"**Relevant Internal Policy**: `{top_match.get('doc_name')}` (Cosine Similarity: {top_match.get('similarity')})"
+        context_parts = []
+        for i, m in enumerate(matched_chunks[:4], 1):
+            context_parts.append(
+                f"[{i}] Source: {m.get('doc_name', 'Policy Document')}\n{m.get('text', '')}"
+            )
+        context_str = "\n\n".join(context_parts)
     else:
-        answer += "No exact matching policy chunk found in ChromaDB vector store."
+        context_str = "No specific policy documents retrieved."
+
+    # Step 3: Build conversation history (last 4 turns)
+    history_lines = []
+    for turn in (payload.chat_history or [])[-4:]:
+        q = turn.get('query', '').strip()
+        a = turn.get('answer', '').strip()
+        if q:
+            history_lines.append(f"User: {q}")
+        if a:
+            # Truncate long history entries to save context window
+            history_lines.append(f"Assistant: {a[:300]}{'...' if len(a) > 300 else ''}")
+    history_str = "\n".join(history_lines) if history_lines else "None"
+
+    # Step 4: Build the final prompt
+    prompt = f"""You are a helpful, knowledgeable AI assistant. You are also an expert in Indian banking regulations (SEBI, RBI, IRDAI, PFRDA), compliance, and finance.
+
+Regulatory Context (use only if directly relevant to the question):
+{context_str}
+
+Conversation History:
+{history_str}
+
+User: {user_query}
+
+Instructions:
+- Answer the question directly and conversationally.
+- For greetings ("hi", "hello"), respond warmly and introduce yourself briefly.
+- For compliance/regulatory questions, use the context above and be specific with details.
+- For general questions (coding, math, science, etc.), answer from your knowledge.
+- NEVER paste raw document text. Always synthesize a clear, human answer.
+- Keep answers concise unless the user asks for detail.
+- Do NOT start your answer with "Based on retrieved documents" or similar phrases.
+
+Assistant:"""
+
+    # Step 5: Call Ollama directly via HTTP (more reliable than LangChain wrapper)
+    active_model = get_available_ollama_model()
+    # Simple/short queries get fewer tokens → faster response
+    is_simple = len(user_query.split()) <= 5
+    num_predict = 300 if is_simple else 1024
+    answer = ""
+    try:
+        logger_chat.info(f"Calling Ollama model '{active_model}' for query: {user_query[:60]}")
+        resp = _http.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={
+                "model": active_model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.3,
+                    "num_predict": num_predict,
+                    "num_ctx": 4096
+                }
+            },
+            timeout=180  # 3 minutes max
+        )
+        if resp.status_code == 200:
+            answer = resp.json().get("response", "").strip()
+            logger_chat.info(f"Ollama responded successfully ({len(answer)} chars)")
+        elif resp.status_code == 404:
+            raise ValueError(f"Model '{active_model}' not found in Ollama. Run: ollama pull {active_model}")
+        else:
+            raise ValueError(f"Ollama HTTP {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger_chat.error(f"Ollama call failed: {e}")
+        answer = (
+            f"⚠️ Could not reach the AI model ({active_model}). "
+            f"Please ensure Ollama is running and the model is pulled.\n\n"
+            f"Run in terminal:\n`ollama pull {active_model}`\n`ollama serve`"
+        )
 
     return {
         "query": user_query,
         "answer": answer,
-        "sources": matched_chunks
+        "sources": matched_chunks,
+        "model_used": active_model
     }
 
 @app.post("/api/pipeline/run")
@@ -384,4 +514,4 @@ async def audit_internal_policy(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("api:app", host="0.0.0.0", port=8001, reload=False)

@@ -36,7 +36,7 @@ export default function UploadAuditView() {
     }
 
     try {
-      const res = await axios.post('http://localhost:8000/api/audit-policy', formData, {
+      const res = await axios.post('http://localhost:8001/api/audit-policy', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setReport(res.data);

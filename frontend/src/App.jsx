@@ -8,7 +8,7 @@ import EvaluationView from './components/EvaluationView';
 import AuditView from './components/AuditView';
 import ChatView from './components/ChatView';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = 'http://localhost:8001/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('tickets');
@@ -63,7 +63,7 @@ export default function App() {
         setRunningPipeline(false);
       }, 30000);
     } catch (err) {
-      alert('Error triggering pipeline. Check if backend is running on port 8000.');
+      alert('Error triggering pipeline. Check if backend is running on port 8001.');
       setRunningPipeline(false);
     }
   };

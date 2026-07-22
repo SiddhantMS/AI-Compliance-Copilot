@@ -10,7 +10,7 @@ export default function EvaluationView() {
   const fetchEvaluation = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('http://localhost:8000/api/evaluation');
+      const res = await axios.get('http://localhost:8001/api/evaluation');
       setEvalData(res.data);
     } catch (err) {
       console.error('Error fetching RAGAS evaluation metrics:', err);
@@ -26,7 +26,7 @@ export default function EvaluationView() {
   const handleRunEvaluation = async () => {
     setRunning(true);
     try {
-      const res = await axios.post('http://localhost:8000/api/evaluation/run');
+      const res = await axios.post('http://localhost:8001/api/evaluation/run');
       setEvalData(res.data);
     } catch (err) {
       alert('Error running RAGAS evaluation. Check if FastAPI backend is running on port 8000.');
