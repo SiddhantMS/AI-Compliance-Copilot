@@ -49,43 +49,61 @@ def detect_domain(text_or_filename: str) -> str:
     return "General BFSI"
 
 def extract_text_from_pdf(pdf_path: str) -> tuple[str, bool]:
-    """Extract text from PDF using PyMuPDF. Fallback to Tesseract OCR if text < 50 words.
+    """Extract text from PDF using PyMuPDF + Page-Level Embedded Image OCR for mixed PDFs.
     Returns tuple of (extracted_text, ocr_used_boolean).
     """
     filename = os.path.basename(pdf_path)
-    text = ""
+    combined_text = ""
+    ocr_used = False
+
     try:
         doc = fitz.open(pdf_path)
-        for page in doc:
-            page_text = page.get_text()
-            if page_text:
-                text += page_text + "\n"
+        for page_idx, page in enumerate(doc):
+            page_text = page.get_text() or ""
+            image_ocr_text = ""
+
+            # Check for embedded image objects (scanned tables, diagrams, signatures)
+            image_list = page.get_images(full=True)
+            if image_list:
+                for img_info in image_list:
+                    xref = img_info[0]
+                    try:
+                        base_image = doc.extract_image(xref)
+                        image_bytes = base_image["image"]
+                        image_ext = base_image["ext"]
+                        
+                        pil_img = Image.open(io.BytesIO(image_bytes))
+                        ocr_res = pytesseract.image_to_string(pil_img).strip()
+                        if ocr_res and len(ocr_res.split()) >= 3:
+                            image_ocr_text += "\n[Embedded Image OCR]: " + ocr_res + "\n"
+                            ocr_used = True
+                    except Exception:
+                        pass
+
+            # Combine page digital text + page embedded image OCR text
+            page_combined = page_text + ("\n" + image_ocr_text if image_ocr_text else "")
+            
+            # Page-level full rendering fallback if page has zero digital text and images
+            if not page_combined.strip():
+                try:
+                    pix = page.get_pixmap(dpi=300)
+                    img_bytes = pix.tobytes("png")
+                    full_page_ocr = pytesseract.image_to_string(Image.open(io.BytesIO(img_bytes)))
+                    if full_page_ocr.strip():
+                        page_combined = "\n[Full Page OCR]: " + full_page_ocr.strip() + "\n"
+                        ocr_used = True
+                except Exception:
+                    pass
+
+            combined_text += page_combined + "\n"
+
         doc.close()
     except Exception as e:
         logger.error(f"Error reading PDF with PyMuPDF ({pdf_path}): {e}")
 
-    words = text.split()
-    if len(words) >= 50:
-        return text.strip(), False
-
-    # OCR Fallback path (< 50 words extracted)
-    logger.info(f"PDF '{pdf_path}' yielded {len(words)} words (<50). Triggering Tesseract OCR fallback at 300 DPI...")
-    ocr_text = ""
-    try:
-        doc = fitz.open(pdf_path)
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            pix = page.get_pixmap(dpi=300)
-            img_bytes = pix.tobytes("png")
-            image = Image.open(io.BytesIO(img_bytes))
-            page_ocr = pytesseract.image_to_string(image)
-            ocr_text += page_ocr + "\n"
-        doc.close()
-    except Exception as e:
-        logger.warning(f"Tesseract OCR system call fallback for {pdf_path}: {e}")
-
-    if ocr_text and len(ocr_text.split()) >= 10:
-        return ocr_text.strip(), True
+    words = combined_text.split()
+    if len(words) >= 10:
+        return combined_text.strip(), ocr_used
 
     # Fallback if tesseract binary is not installed on system PATH
     domain = detect_domain(filename)
@@ -110,123 +128,101 @@ def chunk_text(text: str, chunk_size_words: int = 400, overlap_words: int = 50) 
         doc = nlp(cleaned_text[:50000])
         sentences = [sent.text.strip() for sent in doc.sents if sent.text.strip()]
     else:
-        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', cleaned_text) if s.strip()]
+        sentences = re.split(r'(?<=[.!?])\s+', cleaned_text)
 
     chunks = []
-    current_words = []
-    
+    current_chunk = []
+    current_word_count = 0
+
     for sent in sentences:
-        words = sent.split()
-        if not words:
-            continue
-        
-        if len(current_words) + len(words) <= chunk_size_words:
-            current_words.extend(words)
-        else:
-            chunks.append(" ".join(current_words))
-            overlap = current_words[-overlap_words:] if len(current_words) >= overlap_words else current_words
-            current_words = overlap + words
+        words_in_sent = len(sent.split())
+        if current_word_count + words_in_sent > chunk_size_words and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            
+            # Create overlap
+            overlap_chunk = []
+            overlap_count = 0
+            for s in reversed(current_chunk):
+                s_words = len(s.split())
+                if overlap_count + s_words <= overlap_words:
+                    overlap_chunk.insert(0, s)
+                    overlap_count += s_words
+                else:
+                    break
+            
+            current_chunk = overlap_chunk
+            current_word_count = overlap_count
 
-    if current_words:
-        chunks.append(" ".join(current_words))
+        current_chunk.append(sent)
+        current_word_count += words_in_sent
 
-    if not chunks and cleaned_text:
-        words = cleaned_text.split()
-        step = chunk_size_words - overlap_words
-        for i in range(0, len(words), step):
-            chunks.append(" ".join(words[i:i + chunk_size_words]))
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
 
     return chunks
 
-def process_bank_policies(policy_dir: str = "data/bank_policies") -> int:
-    """Process Bank of India policy PDFs into policy_chunks table."""
+def process_circular_pdf(pdf_path: str, circular_id: int):
+    """Extract text and chunk PDF circular into document_chunks table."""
     conn = get_connection()
     cursor = conn.cursor()
+    
+    cursor.execute("SELECT regulator, domain FROM document_queue WHERE id = ?", (circular_id,))
+    row = cursor.fetchone()
+    regulator = row["regulator"] if row else "SEBI"
+    domain = row["domain"] if row else detect_domain(pdf_path)
 
-    pdf_files = glob.glob(os.path.join(policy_dir, "*.pdf"))
-    total_chunks = 0
-    ocr_count = 0
+    extracted_text, ocr_used = extract_text_from_pdf(pdf_path)
+    chunks = chunk_text(extracted_text)
 
-    for pdf_path in pdf_files:
-        doc_name = os.path.basename(pdf_path)
-        text, ocr_used = extract_text_from_pdf(pdf_path)
-        if ocr_used:
-            ocr_count += 1
+    cursor.execute("DELETE FROM document_chunks WHERE circular_id = ?", (circular_id,))
+    
+    for idx, chunk in enumerate(chunks):
+        chunk_id = f"CIRC_{circular_id}_CHK_{idx+1}"
+        cursor.execute("""
+            INSERT INTO document_chunks (chunk_id, circular_id, regulator, domain, chunk_index, text)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (chunk_id, circular_id, regulator, domain, idx + 1, chunk))
 
-        domain = detect_domain(doc_name + " " + text)
-        chunks = chunk_text(text, chunk_size_words=400, overlap_words=50)
-
-        for idx, chunk in enumerate(chunks):
-            chunk_id = f"policy_{doc_name}_{idx}"
-            cursor.execute("""
-                INSERT OR REPLACE INTO policy_chunks (chunk_id, doc_name, domain, text, chunk_index)
-                VALUES (?, ?, ?, ?, ?)
-            """, (chunk_id, doc_name, domain, chunk, idx))
-            total_chunks += 1
-
+    cursor.execute("UPDATE document_queue SET status = 'processed', raw_text = ? WHERE id = ?", (extracted_text[:2000], circular_id))
     conn.commit()
     conn.close()
 
-    logger.info(f"Processed {len(pdf_files)} Bank Policy PDFs into {total_chunks} policy chunks ({ocr_count} used Tesseract OCR).")
-    log_audit("ALL", "Processor", "PolicyProcessing", "Bank Policies Ingested", f"Ingested {total_chunks} policy chunks from {len(pdf_files)} PDFs ({ocr_count} OCR triggered).")
-    return total_chunks
+    logger.info(f"Processed PDF '{pdf_path}' -> {len(chunks)} chunks inserted into document_chunks (OCR Used: {ocr_used}).")
+    log_audit(
+        circular_id,
+        "Layer 2 (Processor)",
+        "PDF Processing",
+        "Extracted & Chunked",
+        f"Extracted {len(extracted_text.split())} words across {len(chunks)} chunks. OCR Fallback: {ocr_used}."
+    )
 
-def process_queued_circulars() -> int:
-    """Process pending circulars from document_queue into document_chunks table."""
+def run_processing():
+    """Batch process pending PDFs in document_queue."""
+    logger.info("=== Running Layer 2 PDF Processing Pipeline ===")
     conn = get_connection()
     cursor = conn.cursor()
-
-    cursor.execute("SELECT id, regulator, title, content, source_url_or_path FROM document_queue WHERE status = 'pending'")
+    cursor.execute("SELECT id, pdf_url, title FROM document_queue WHERE status = 'pending'")
     rows = cursor.fetchall()
-    total_circular_chunks = 0
-
-    for row in rows:
-        circular_id = str(row["id"])
-        regulator = row["regulator"]
-        title = row["title"]
-        content = row["content"]
-        source = row["source_url_or_path"]
-
-        if source and os.path.exists(source) and source.endswith(".pdf"):
-            full_text, _ = extract_text_from_pdf(source)
-        else:
-            full_text = f"{title}\n\n{content}"
-
-        domain = detect_domain(title + " " + full_text)
-        chunks = chunk_text(full_text, chunk_size_words=400, overlap_words=50)
-
-        for idx, chunk in enumerate(chunks):
-            chunk_id = f"circ_{circular_id}_{idx}"
-            cursor.execute("""
-                INSERT OR REPLACE INTO document_chunks (chunk_id, circular_id, regulator, domain, text, chunk_index)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (chunk_id, circular_id, regulator, domain, chunk, idx))
-            total_circular_chunks += 1
-
-        cursor.execute("UPDATE document_queue SET status = 'processed' WHERE id = ?", (row["id"],))
-
-    conn.commit()
     conn.close()
 
-    logger.info(f"Processed {len(rows)} queued circulars into {total_circular_chunks} document chunks.")
-    log_audit("ALL", "Processor", "CircularProcessing", "Circular Chunks Created", f"Processed {len(rows)} circulars into {total_circular_chunks} chunks.")
-    return total_circular_chunks
+    if not rows:
+        logger.info("No pending circular PDFs to process.")
+        return
 
-def run_processing() -> dict:
-    """Run full Layer 2 processing pipeline."""
-    init_db()
-    logger.info("=== Starting Layer 2 Document Processing Pipeline ===")
-    policy_chunk_count = process_bank_policies()
-    circular_chunk_count = process_queued_circulars()
+    for r in rows:
+        circ_id = r["id"]
+        pdf_url = r["pdf_url"]
+        title = r["title"]
 
-    summary = {
-        "status": "success",
-        "policy_chunks": policy_chunk_count,
-        "circular_chunks": circular_chunk_count
-    }
-    logger.info(f"=== Layer 2 Complete: {policy_chunk_count} policy chunks, {circular_chunk_count} circular chunks ===")
-    return summary
+        if pdf_url and os.path.exists(pdf_url):
+            process_circular_pdf(pdf_url, circ_id)
+        else:
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE document_queue SET status = 'processed' WHERE id = ?", (circ_id,))
+            conn.commit()
+            conn.close()
 
 if __name__ == "__main__":
-    summary = run_processing()
-    print(json.dumps(summary, indent=2))
+    init_db()
+    run_processing()
