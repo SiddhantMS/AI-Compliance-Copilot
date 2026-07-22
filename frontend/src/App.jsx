@@ -3,6 +3,7 @@ import axios from 'axios';
 import Navbar from './components/Navbar';
 import TicketsView from './components/TicketsView';
 import DriftView from './components/DriftView';
+import UploadAuditView from './components/UploadAuditView';
 import AuditView from './components/AuditView';
 import ChatView from './components/ChatView';
 
@@ -38,7 +39,6 @@ export default function App() {
     fetchData();
   }, []);
 
-  // Live polling while pipeline is running
   useEffect(() => {
     let interval = null;
     if (runningPipeline) {
@@ -57,7 +57,6 @@ export default function App() {
       await axios.post(`${API_BASE}/pipeline/run`);
       alert('SEBI & RBI Compliance Pipeline started! Tickets and drift scores will update live in the UI as agents process circulars.');
       
-      // Auto stop running state after 30s
       setTimeout(() => {
         fetchData();
         setRunningPipeline(false);
@@ -80,6 +79,7 @@ export default function App() {
       <main>
         {activeTab === 'tickets' && <TicketsView tickets={tickets} loading={loading} />}
         {activeTab === 'drift' && <DriftView analytics={analytics} />}
+        {activeTab === 'upload' && <UploadAuditView />}
         {activeTab === 'audit' && <AuditView auditLogs={auditLogs} loading={loading} />}
         {activeTab === 'chat' && <ChatView />}
       </main>

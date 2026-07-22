@@ -5,20 +5,19 @@ import json
 import sqlite3
 import pandas as pd
 from typing import Optional, List
-from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Query, HTTPException, BackgroundTasks, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# Ensure src/ and data/ are in sys.path
 sys.path.append(os.path.dirname(__file__))
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 
-from db import get_connection, init_db
-from embeddings import search_similar, sync_db_to_chroma
+from db import get_connection, init_db, log_audit
+from embeddings import search_similar, sync_db_to_chroma, calculate_drift, get_chroma_client, embedder
 from agents import run_agent_pipeline_on_circular, process_all_queued_circulars_with_agents
 from ingestion import run_ingestion
-from processor import run_processing
+from processor import run_processing, extract_text_from_pdf
 from generate_sample_policies import generate_all_sample_bank_policies
 
 load_dotenv()
@@ -101,11 +100,9 @@ def get_drift_analytics():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # 1. Fetch tickets
     cursor.execute("SELECT * FROM compliance_tickets WHERE regulator IN ('SEBI', 'RBI')")
     ticket_rows = cursor.fetchall()
 
-    # 2. Fetch all calculated drift scores from audit logs
     cursor.execute("""
         SELECT circular_id, details, timestamp FROM compliance_audit 
         WHERE agent_name LIKE '%Policy Mapper%' AND action = 'Calculated Drift'
@@ -113,7 +110,6 @@ def get_drift_analytics():
     """)
     audit_rows = cursor.fetchall()
 
-    # 3. Fetch all queued circulars for title & regulator info
     cursor.execute("SELECT id, regulator, title FROM document_queue")
     circ_rows = cursor.fetchall()
     conn.close()
@@ -245,6 +241,120 @@ def trigger_pipeline(background_tasks: BackgroundTasks):
 
     background_tasks.add_task(run_full_pipeline)
     return {"status": "accepted", "message": "SEBI & RBI compliance pipeline triggered in background."}
+
+@app.post("/api/audit-policy")
+async def audit_internal_policy(
+    policy_name: Optional[str] = Form("Internal Bank Policy"),
+    organization_name: Optional[str] = Form("Bank of India"),
+    policy_text: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None)
+):
+    """Client Upload Endpoint: Compares uploaded internal organization policy against SEBI & RBI regulations."""
+    extracted_text = ""
+
+    if file:
+        temp_path = f"temp_upload_{file.filename}"
+        with open(temp_path, "wb") as f:
+            f.write(await file.read())
+
+        if file.filename.lower().endswith(".pdf"):
+            extracted_text = extract_text_from_pdf(temp_path)
+        else:
+            with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
+                extracted_text = f.read()
+
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+    elif policy_text:
+        extracted_text = policy_text.strip()
+
+    if not extracted_text:
+        raise HTTPException(status_code=400, detail="Please upload a PDF/text file or provide policy text.")
+
+    # Compare against ingested SEBI and RBI regulations stored in ChromaDB or SQLite
+    client = get_chroma_client()
+    try:
+        coll_sebi = client.get_collection(name="sebi_circulars")
+    except Exception:
+        sync_db_to_chroma()
+        coll_sebi = client.get_collection(name="sebi_circulars")
+
+    query_emb = embedder.get_embedding(extracted_text)
+    
+    results = None
+    try:
+        results = coll_sebi.query(query_embeddings=[query_emb], n_results=5)
+    except Exception:
+        results = None
+
+    matched_regulations = []
+    if results and results.get("documents") and len(results["documents"][0]) > 0:
+        docs = results["documents"][0]
+        metas = results["metadatas"][0] if results.get("metadatas") else []
+        dists = results.get("distances", [[]])[0]
+
+        for idx in range(len(docs)):
+            dist = dists[idx] if idx < len(dists) else 0.5
+            similarity = max(0.0, min(1.0, 1.0 - dist if dist <= 1.0 else 1.0 / (1.0 + dist)))
+            regulator = metas[idx].get("regulator", "SEBI/RBI") if idx < len(metas) else "SEBI/RBI"
+            circ_id = metas[idx].get("circular_id", "N/A") if idx < len(metas) else "N/A"
+            
+            matched_regulations.append({
+                "circular_id": circ_id,
+                "regulator": regulator,
+                "text": docs[idx][:250] + ("..." if len(docs[idx]) > 250 else ""),
+                "similarity": round(float(similarity), 4)
+            })
+
+    # Compute Policy Drift Score
+    drift_score = calculate_drift(extracted_text, matched_regulations)
+
+    if drift_score >= 0.80:
+        priority = "HIGH (P1)"
+        risk_level = "High Policy Conflict"
+    elif drift_score >= 0.60:
+        priority = "MEDIUM (P2)"
+        risk_level = "Moderate Gap - Policy Updates Required"
+    elif drift_score >= 0.40:
+        priority = "LOW (P3)"
+        risk_level = "Minor Alignment Adjustments Suggested"
+    else:
+        priority = "Archive / Compliant"
+        risk_level = "Fully Aligned with Active SEBI & RBI Guidelines"
+
+    summary = (
+        f"Internal Policy '{policy_name}' for {organization_name} evaluated against active SEBI & RBI regulatory directives. "
+        f"Calculated Weighted Drift Score is {drift_score:.4f} ({priority}). "
+        f"Overall Assessment: {risk_level}."
+    )
+
+    action_items = [
+        f"Review internal policy clauses against matched {matched_regulations[0]['regulator'] if matched_regulations else 'SEBI/RBI'} circular provisions.",
+        "Formulate internal compliance task force to update mandatory operational controls.",
+        "Submit revised policy draft to Executive Risk Committee for sign-off and file regulatory compliance confirmation."
+    ]
+
+    log_audit(
+        "CLIENT_UPLOAD",
+        "Client Upload Auditor",
+        "Policy Drift Analysis",
+        "Report Generated",
+        f"Evaluated '{policy_name}' for {organization_name} -> Drift: {drift_score:.4f} ({priority})"
+    )
+
+    return {
+        "status": "success",
+        "organization_name": organization_name,
+        "policy_name": policy_name,
+        "drift_score": drift_score,
+        "priority": priority,
+        "risk_level": risk_level,
+        "summary": summary,
+        "matched_regulations": matched_regulations,
+        "action_items": action_items,
+        "word_count": len(re.findall(r'\w+', extracted_text))
+    }
 
 if __name__ == "__main__":
     import uvicorn

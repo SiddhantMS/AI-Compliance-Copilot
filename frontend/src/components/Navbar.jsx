@@ -3,7 +3,7 @@ import { Shield, Play, Activity } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab, onRunPipeline, runningPipeline }) {
   return (
-    <header className="glass-card" style={{ marginBottom: '24px', padding: '16px 24px' }}>
+    <header className="glass-card no-print" style={{ marginBottom: '24px', padding: '16px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', padding: '10px', borderRadius: '12px', display: 'flex' }}>
@@ -23,12 +23,15 @@ export default function Navbar({ activeTab, setActiveTab, onRunPipeline, running
         </div>
 
         {/* Tab Navigation */}
-        <div style={{ display: 'flex', background: '#0F172A', padding: '4px', borderRadius: '10px', border: '1px solid #334155' }}>
+        <div style={{ display: 'flex', background: '#0F172A', padding: '4px', borderRadius: '10px', border: '1px solid #334155', flexWrap: 'wrap', gap: '2px' }}>
           <button className={`tab-btn ${activeTab === 'tickets' ? 'active' : ''}`} onClick={() => setActiveTab('tickets')}>
             🎟️ Tickets
           </button>
           <button className={`tab-btn ${activeTab === 'drift' ? 'active' : ''}`} onClick={() => setActiveTab('drift')}>
             📊 Drift Analytics
+          </button>
+          <button className={`tab-btn ${activeTab === 'upload' ? 'active' : ''}`} onClick={() => setActiveTab('upload')}>
+            📤 Audit Policy & Print
           </button>
           <button className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>
             📜 Audit Trail
