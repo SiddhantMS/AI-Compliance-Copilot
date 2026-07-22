@@ -10,13 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+# Ensure src/ and data/ are in sys.path
 sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 
 from db import get_connection, init_db
 from embeddings import search_similar, sync_db_to_chroma
 from agents import run_agent_pipeline_on_circular, process_all_queued_circulars_with_agents
 from ingestion import run_ingestion
 from processor import run_processing
+from generate_sample_policies import generate_all_sample_bank_policies
 
 load_dotenv()
 
@@ -127,7 +130,6 @@ def get_drift_analytics():
         seen_circs.add(circ_id)
 
         details = r["details"]
-        # Parse details: Drift Score: 0.6185, Priority: MEDIUM (P2), Matched Policies: [...]
         score_match = re.search(r'Drift Score:\s*([\d\.]+)', details)
         prio_match = re.search(r'Priority:\s*([^,\n]+)', details)
 
@@ -138,7 +140,6 @@ def get_drift_analytics():
         regulator = info["regulator"]
         title = info["title"]
 
-        # Domain detection for display
         lower = title.lower()
         if "kyc" in lower or "aml" in lower:
             domain = "KYC/AML"
@@ -162,7 +163,6 @@ def get_drift_analytics():
             "priority": priority
         })
 
-    # Total metrics calculation
     all_scores = [d["drift_score"] for d in domain_scores]
     avg_drift = round(float(sum(all_scores) / len(all_scores)), 4) if all_scores else 0.0
     
@@ -230,10 +230,18 @@ def chat_ai(payload: ChatQuery):
 def trigger_pipeline(background_tasks: BackgroundTasks):
     """Trigger complete Layer 1 to Layer 4 pipeline execution for SEBI & RBI."""
     def run_full_pipeline():
+        generate_all_sample_bank_policies("data/bank_policies")
+        
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE document_queue SET status = 'pending'")
+        conn.commit()
+        conn.close()
+
         run_ingestion()
         run_processing()
         sync_db_to_chroma()
-        process_all_queued_circulars_with_agents()  # Execute LangGraph agents!
+        process_all_queued_circulars_with_agents()
 
     background_tasks.add_task(run_full_pipeline)
     return {"status": "accepted", "message": "SEBI & RBI compliance pipeline triggered in background."}
