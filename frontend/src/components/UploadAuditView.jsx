@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Upload, FileText, Printer, ShieldCheck, AlertTriangle, BookOpen, CheckCircle, RefreshCw, AlertCircle, Clock, ShieldAlert } from 'lucide-react';
+import { Upload, FileText, Printer, ShieldCheck, RefreshCw, CheckCircle, ShieldAlert } from 'lucide-react';
 import axios from 'axios';
 
 export default function UploadAuditView() {
-  const [orgName, setOrgName] = useState('Bank of India / Client Org');
+  const [orgName, setOrgName] = useState('Bank of India / Internal Audit');
   const [policyName, setPolicyName] = useState('Internal Operational Compliance Policy 2026');
   const [policyText, setPolicyText] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -41,7 +41,7 @@ export default function UploadAuditView() {
       });
       setReport(res.data);
     } catch (err) {
-      alert('Error analyzing policy. Check if FastAPI backend is running on port 8000.');
+      alert('Error analyzing policy. Ensure FastAPI backend is running on port 8001.');
     } finally {
       setLoading(false);
     }
@@ -53,46 +53,31 @@ export default function UploadAuditView() {
 
   return (
     <div>
-      {/* Printable Report Styles */}
+      {/* ── Printable CSS Overrides ── */}
       <style>{`
         @media print {
-          body {
-            background: #FFFFFF !important;
-            color: #000000 !important;
-          }
-          .no-print, header, nav, button, input, select, textarea {
-            display: none !important;
-          }
+          body { background: #FFFFFF !important; color: #000000 !important; }
+          .no-print, header, nav, button, input, select, textarea { display: none !important; }
           .printable-report {
-            background: #FFFFFF !important;
-            color: #000000 !important;
-            border: 2px solid #000000 !important;
-            box-shadow: none !important;
-            padding: 30px !important;
-            margin: 0 !important;
-            width: 100% !important;
+            background: #FFFFFF !important; color: #000000 !important;
+            border: 2px solid #000000 !important; box-shadow: none !important;
+            padding: 30px !important; margin: 0 !important; width: 100% !important;
           }
-          .printable-report h2, .printable-report h3, .printable-report h4 {
-            color: #000000 !important;
-          }
-          .print-badge {
-            border: 1px solid #000 !important;
-            color: #000 !important;
-            background: none !important;
-          }
+          .printable-report h2, .printable-report h3, .printable-report h4 { color: #000000 !important; }
+          .print-badge { border: 1px solid #000 !important; color: #000 !important; background: none !important; }
         }
       `}</style>
 
-      {/* Top Input & Upload Section */}
+      {/* ── Upload & Form Section ── */}
       <div className="glass-card no-print" style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
           <Upload size={22} color="#38BDF8" />
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Upload Internal Policy for AI Regulation Comparison</h3>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Upload Internal Policy for SEBI & RBI AI Audit</h3>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '16px' }}>
           <div>
-            <label style={{ fontSize: '0.85rem', color: '#94A3B8', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+            <label style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
               Organization Name:
             </label>
             <input 
@@ -104,7 +89,7 @@ export default function UploadAuditView() {
           </div>
 
           <div>
-            <label style={{ fontSize: '0.85rem', color: '#94A3B8', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+            <label style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
               Internal Policy Document Title:
             </label>
             <input 
@@ -116,14 +101,14 @@ export default function UploadAuditView() {
           </div>
         </div>
 
-        {/* File Drag & Drop / Upload Input */}
-        <div style={{ border: '2px dashed #334155', borderRadius: '10px', padding: '20px', textAlign: 'center', marginBottom: '16px', background: '#0F172A' }}>
-          <FileText size={32} color="#60A5FA" style={{ marginBottom: '8px' }} />
+        {/* Drag & Drop File Input */}
+        <div style={{ border: '2px dashed #1E3A5F', borderRadius: '14px', padding: '24px', textAlign: 'center', marginBottom: '16px', background: 'rgba(255,255,255,0.02)' }}>
+          <FileText size={36} color="#60A5FA" style={{ marginBottom: '8px' }} />
           <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#F8FAFC', marginBottom: '4px' }}>
-            Upload Organization Policy PDF or Text Document
+            Upload Organization Policy Document (.pdf or .txt)
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#94A3B8', marginBottom: '12px' }}>
-            Supports .pdf, .txt formats
+          <div style={{ fontSize: '0.78rem', color: '#64748B', marginBottom: '14px' }}>
+            Supports PDF circulars, internal policy manual texts
           </div>
           <input 
             type="file" 
@@ -132,19 +117,19 @@ export default function UploadAuditView() {
             style={{ display: 'none' }}
             id="policy-file-upload"
           />
-          <label htmlFor="policy-file-upload" className="action-btn" style={{ background: '#334155', cursor: 'pointer' }}>
+          <label htmlFor="policy-file-upload" className="action-btn" style={{ background: '#1E3A5F', cursor: 'pointer', fontSize: '0.85rem' }}>
             Choose File...
           </label>
           {selectedFile && (
-            <div style={{ marginTop: '10px', color: '#34D399', fontSize: '0.85rem', fontWeight: 600 }}>
-              ✓ Selected File: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+            <div style={{ marginTop: '12px', color: '#34D399', fontSize: '0.82rem', fontWeight: 600 }}>
+              ✓ Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
             </div>
           )}
         </div>
 
-        {/* Alternative Paste Text Area */}
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ fontSize: '0.85rem', color: '#94A3B8', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+        {/* Or Paste Policy Content */}
+        <div style={{ marginBottom: '18px' }}>
+          <label style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
             Or Paste Policy Content Directly:
           </label>
           <textarea 
@@ -153,194 +138,140 @@ export default function UploadAuditView() {
             value={policyText}
             onChange={(e) => setPolicyText(e.target.value)}
             className="search-input"
-            style={{ resize: 'vertical' }}
+            style={{ resize: 'vertical', fontFamily: 'var(--font)' }}
           />
         </div>
 
-        {/* Submit Action Button */}
+        {/* Submit Action */}
         <button 
           className="action-btn" 
           onClick={handleAnalyze} 
           disabled={loading}
-          style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '1rem' }}
+          style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '0.95rem', background: 'linear-gradient(135deg, #2563EB, #1D4ED8)' }}
         >
           {loading ? <RefreshCw className="animate-spin" size={18} /> : <ShieldCheck size={18} />}
-          {loading ? 'Comparing Policy against Active SEBI & RBI Regulations...' : 'Analyze Policy & Generate Official Report'}
+          {loading ? 'Comparing Policy against Active SEBI & RBI Regulations...' : 'Analyze Policy & Generate Official Audit Report'}
         </button>
       </div>
 
-      {/* Analysis Loading State */}
+      {/* ── Loading Spinner State ── */}
       {loading && (
         <div className="glass-card no-print" style={{ textAlign: 'center', padding: '40px' }}>
-          <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#38BDF8', marginBottom: '8px' }}>
-            🔍 AI Evaluation Pipeline in Progress
+          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#38BDF8', marginBottom: '8px' }}>
+            🔍 AI Compliance Pipeline in Progress
           </div>
-          <div style={{ color: '#94A3B8', fontSize: '0.9rem' }}>
-            Extracting text $\rightarrow$ Querying ChromaDB SEBI & RBI Collections $\rightarrow$ Computing Weighted Drift Score $\rightarrow$ Formulating Compliance Amendment Plan...
+          <div style={{ color: '#64748B', fontSize: '0.85rem' }}>
+            Extracting text $\rightarrow$ Querying ChromaDB Vector Index $\rightarrow$ Computing Drift Score $\rightarrow$ Generating Recommendation Plan...
           </div>
         </div>
       )}
 
-      {/* Report Result Display */}
+      {/* ── Report Output Display ── */}
       {report && (
         <div className="glass-card printable-report">
-          {/* Header & Print Toolbar */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', paddingBottom: '16px', borderBottom: '2px solid #334155', marginBottom: '20px' }}>
+          {/* Header & Print Action */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', paddingBottom: '16px', borderBottom: '1px solid #1E3A5F', marginBottom: '20px' }}>
             <div>
-              <div style={{ fontSize: '0.8rem', color: '#60A5FA', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: '0.75rem', color: '#60A5FA', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 OFFICIAL REGULATORY DRIFT AUDIT REPORT
               </div>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '2px' }}>{report.policy_name}</h2>
-              <div style={{ fontSize: '0.88rem', color: '#94A3B8', marginTop: '2px' }}>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '2px' }}>{report.policy_name}</h2>
+              <div style={{ fontSize: '0.82rem', color: '#64748B', marginTop: '2px' }}>
                 Organization: <strong>{report.organization_name}</strong> | Target Regulators: <strong>SEBI & RBI</strong> | Date: <strong>{new Date().toLocaleDateString()}</strong>
               </div>
             </div>
 
-            <button className="action-btn no-print" onClick={handlePrint} style={{ background: '#059669' }}>
-              <Printer size={16} /> Print Official Report for Compliance Team
+            <button className="action-btn no-print" onClick={handlePrint} style={{ background: '#10B981' }}>
+              <Printer size={16} /> Print Audit Report
             </button>
           </div>
 
           {/* Key Metrics Header Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '20px' }}>
-            <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid #334155' }}>
-              <div style={{ color: '#94A3B8', fontSize: '0.8rem' }}>Calculated Drift Score</div>
-              <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#38BDF8', marginTop: '2px' }}>
-                {report.drift_score.toFixed(4)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+            <div style={{ background: '#0A1628', padding: '14px', borderRadius: '10px', border: '1px solid #1E3A5F' }}>
+              <div style={{ color: '#64748B', fontSize: '0.78rem' }}>Calculated Drift Score</div>
+              <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#38BDF8', marginTop: '2px' }}>
+                {report.drift_score?.toFixed(4)}
               </div>
             </div>
 
-            <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid #334155' }}>
-              <div style={{ color: '#94A3B8', fontSize: '0.8rem' }}>Priority Risk Classification</div>
+            <div style={{ background: '#0A1628', padding: '14px', borderRadius: '10px', border: '1px solid #1E3A5F' }}>
+              <div style={{ color: '#64748B', fontSize: '0.78rem' }}>Priority Risk Tier</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '6px' }}>
-                <span className={`badge print-badge ${report.priority.includes('HIGH') ? 'badge-high' : report.priority.includes('MEDIUM') ? 'badge-medium' : 'badge-low'}`}>
+                <span className={`badge print-badge ${report.priority?.includes('HIGH') ? 'badge-high' : report.priority?.includes('MEDIUM') ? 'badge-medium' : 'badge-low'}`}>
                   {report.priority}
                 </span>
               </div>
             </div>
 
-            <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid #334155' }}>
-              <div style={{ color: '#94A3B8', fontSize: '0.8rem' }}>Compliance Assessment</div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#F8FAFC', marginTop: '6px' }}>
+            <div style={{ background: '#0A1628', padding: '14px', borderRadius: '10px', border: '1px solid #1E3A5F' }}>
+              <div style={{ color: '#64748B', fontSize: '0.78rem' }}>Compliance Status</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#F8FAFC', marginTop: '6px' }}>
                 {report.risk_level}
               </div>
             </div>
           </div>
 
           {/* Executive Summary */}
-          <div style={{ background: '#0F172A', padding: '16px', borderRadius: '8px', marginBottom: '20px', borderLeft: '4px solid #3B82F6' }}>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#93C5FD', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ background: '#0A1628', padding: '16px', borderRadius: '10px', marginBottom: '20px', borderLeft: '4px solid #3B82F6' }}>
+            <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#60A5FA', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <FileText size={16} /> Executive Compliance Summary
             </h4>
-            <div style={{ fontSize: '0.92rem', color: '#E2E8F0', lineHeight: '1.6' }}>
+            <div style={{ fontSize: '0.88rem', color: '#CBD5E1', lineHeight: 1.65 }}>
               {report.summary}
             </div>
           </div>
 
-          {/* STRUCTURED EXECUTIVE RECOMMENDATIONS SECTION */}
+          {/* Recommended Roadmap */}
           <div style={{ marginBottom: '24px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#F8FAFC', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ShieldAlert size={20} color="#EF4444" /> Recommended Executive Action Roadmap (SEBI & RBI Mandates)
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#F8FAFC', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldAlert size={18} color="#EF4444" /> Executive Action Roadmap (SEBI & RBI Mandates)
             </h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
-              {/* High Priority Recommendations */}
-              <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.4)', borderTop: '4px solid #EF4444' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+              <div style={{ background: '#0A1628', padding: '14px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', borderTop: '4px solid #EF4444' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span className="badge badge-high">High Priority (P1)</span>
-                  <span style={{ fontSize: '0.75rem', color: '#F87171', fontWeight: 600 }}>15–30 Days SLA</span>
+                  <span style={{ fontSize: '0.72rem', color: '#F87171', fontWeight: 600 }}>15–30 Days SLA</span>
                 </div>
-                <ul style={{ paddingLeft: '16px', fontSize: '0.85rem', color: '#CBD5E1', lineHeight: '1.6' }}>
-                  <li style={{ marginBottom: '6px' }}>
-                    <strong>KYC & V-CIP Directives</strong>: Enforce 2-yr re-KYC for high risk accounts and 3-day CKYCR upload SLA.
-                  </li>
-                  <li>
-                    <strong>Cyber Resilience</strong>: Implement 24x7 SOC, MFA, and mandatory 6-hour incident reporting to CSIRT-Fin.
-                  </li>
+                <ul style={{ paddingLeft: '16px', fontSize: '0.82rem', color: '#CBD5E1', lineHeight: '1.6' }}>
+                  <li style={{ marginBottom: '4px' }}><strong>KYC & V-CIP</strong>: Enforce 2-yr re-KYC for high risk accounts & CKYCR 3-day SLA.</li>
+                  <li><strong>Cyber Resilience</strong>: 24x7 SOC, MFA, and 6-hour incident reporting to CSIRT-Fin.</li>
                 </ul>
               </div>
 
-              {/* Medium Priority Recommendations */}
-              <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.4)', borderTop: '4px solid #F59E0B' }}>
+              <div style={{ background: '#0A1628', padding: '14px', borderRadius: '10px', border: '1px solid rgba(245,158,11,0.3)', borderTop: '4px solid #F59E0B' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span className="badge badge-medium">Medium Priority (P2)</span>
-                  <span style={{ fontSize: '0.75rem', color: '#FBBF24', fontWeight: 600 }}>45–60 Days SLA</span>
+                  <span style={{ fontSize: '0.72rem', color: '#FBBF24', fontWeight: 600 }}>45–60 Days SLA</span>
                 </div>
-                <ul style={{ paddingLeft: '16px', fontSize: '0.85rem', color: '#CBD5E1', lineHeight: '1.6' }}>
-                  <li style={{ marginBottom: '6px' }}>
-                    <strong>SCORES 2.0 Grievances</strong>: Integrate complaint tracking with SEBI 21-day resolution SLAs.
-                  </li>
-                  <li>
-                    <strong>Treasury Kill Switches</strong>: Deploy hardware/software order limit kill switches in trading terminals.
-                  </li>
+                <ul style={{ paddingLeft: '16px', fontSize: '0.82rem', color: '#CBD5E1', lineHeight: '1.6' }}>
+                  <li style={{ marginBottom: '4px' }}><strong>SCORES 2.0</strong>: Integrate complaint tracking with SEBI 21-day SLAs.</li>
+                  <li><strong>Trading Kill Switch</strong>: Deploy order limit kill switches in trading terminals.</li>
                 </ul>
               </div>
 
-              {/* Low Priority Recommendations */}
-              <div style={{ background: '#0F172A', padding: '14px', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.4)', borderTop: '4px solid #6366F1' }}>
+              <div style={{ background: '#0A1628', padding: '14px', borderRadius: '10px', border: '1px solid rgba(99,102,241,0.3)', borderTop: '4px solid #6366F1' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span className="badge badge-low">Low Priority (P3)</span>
-                  <span style={{ fontSize: '0.75rem', color: '#A5B4FC', fontWeight: 600 }}>90 Days SLA</span>
+                  <span style={{ fontSize: '0.72rem', color: '#A5B4FC', fontWeight: 600 }}>90 Days SLA</span>
                 </div>
-                <ul style={{ paddingLeft: '16px', fontSize: '0.85rem', color: '#CBD5E1', lineHeight: '1.6' }}>
-                  <li style={{ marginBottom: '6px' }}>
-                    <strong>Fair Lending Practices</strong>: Separate loan non-compliance penal charges from principal capitalization.
-                  </li>
-                  <li>
-                    <strong>Dormant Account Sweeper</strong>: Automate monthly 10-year dormant account transfers to DEA Fund.
-                  </li>
+                <ul style={{ paddingLeft: '16px', fontSize: '0.82rem', color: '#CBD5E1', lineHeight: '1.6' }}>
+                  <li style={{ marginBottom: '4px' }}><strong>Fair Lending</strong>: Separate loan non-compliance charges from principal capitalization.</li>
+                  <li><strong>Dormant Accounts</strong>: Automate 10-year dormant account transfers to DEA Fund.</li>
                 </ul>
               </div>
             </div>
           </div>
 
-          {/* Matched Regulations Table */}
-          <div style={{ marginBottom: '20px' }}>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#F8FAFC', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <BookOpen size={16} color="#60A5FA" /> Matched SEBI & RBI Active Regulations
+          {/* Action Steps */}
+          <div style={{ background: '#0A1628', padding: '16px', borderRadius: '10px', border: '1px solid #1E3A5F' }}>
+            <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#34D399', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={16} /> Recommended Action Steps for Internal Audit
             </h4>
-            {report.matched_regulations && report.matched_regulations.length > 0 ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ background: '#0F172A', color: '#94A3B8', borderBottom: '1px solid #334155' }}>
-                    <th style={{ padding: '10px 12px' }}>Regulator</th>
-                    <th style={{ padding: '10px 12px' }}>Circular ID</th>
-                    <th style={{ padding: '10px 12px' }}>Regulatory Directive Excerpt</th>
-                    <th style={{ padding: '10px 12px' }}>Similarity</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.matched_regulations.map((reg, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.4)' }}>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span className={`badge ${reg.regulator === 'SEBI' ? 'badge-sebi' : 'badge-rbi'}`}>
-                          {reg.regulator}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: '#38BDF8' }}>
-                        #{reg.circular_id}
-                      </td>
-                      <td style={{ padding: '10px 12px', color: '#CBD5E1' }}>{reg.text}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: 600, color: '#F8FAFC' }}>
-                        {(reg.similarity * 100).toFixed(1)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div style={{ color: '#94A3B8', fontSize: '0.85rem' }}>No specific regulatory conflicts detected.</div>
-            )}
-          </div>
-
-          {/* Action Plan for Compliance Team */}
-          <div style={{ background: '#0F172A', padding: '16px', borderRadius: '8px', border: '1px solid #334155' }}>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#34D399', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CheckCircle size={16} /> Recommended Action Steps for Internal Compliance Team
-            </h4>
-            <ol style={{ paddingLeft: '20px', color: '#CBD5E1', fontSize: '0.9rem', lineHeight: '1.7' }}>
-              {report.action_items.map((item, idx) => (
-                <li key={idx} style={{ marginBottom: '6px' }}>{item}</li>
+            <ol style={{ paddingLeft: '20px', color: '#CBD5E1', fontSize: '0.85rem', lineHeight: '1.7' }}>
+              {report.action_items?.map((item, idx) => (
+                <li key={idx} style={{ marginBottom: '4px' }}>{item}</li>
               ))}
             </ol>
           </div>

@@ -274,16 +274,20 @@ def chat_ai(payload: ChatQuery):
     # Step 1: Retrieve relevant context chunks from ChromaDB
     matched_chunks = search_similar(query_text=user_query, top_k=5)
 
-    # Step 2: Build context string (only if relevant chunks found)
+    # Step 2: Build COMPACT context string — truncate chunks to avoid context overflow
+    # Full document text (~3000 tokens) was filling the 4096 token window, leaving no room for the answer.
+    # Now each chunk is capped at 350 chars → ~450 tokens total for all 3 chunks.
     if matched_chunks:
         context_parts = []
-        for i, m in enumerate(matched_chunks[:4], 1):
+        for i, m in enumerate(matched_chunks[:3], 1):  # max 3 chunks
+            chunk_text = m.get('text', '').strip()
+            snippet = chunk_text[:350] + ('...' if len(chunk_text) > 350 else '')
             context_parts.append(
-                f"[{i}] Source: {m.get('doc_name', 'Policy Document')}\n{m.get('text', '')}"
+                f"[{i}] {m.get('doc_name', 'Policy')}:\n{snippet}"
             )
         context_str = "\n\n".join(context_parts)
     else:
-        context_str = "No specific policy documents retrieved."
+        context_str = "No documents retrieved."
 
     # Step 3: Build conversation history (last 4 turns)
     history_lines = []
@@ -297,33 +301,20 @@ def chat_ai(payload: ChatQuery):
             history_lines.append(f"Assistant: {a[:300]}{'...' if len(a) > 300 else ''}")
     history_str = "\n".join(history_lines) if history_lines else "None"
 
-    # Step 4: Build the final prompt
-    prompt = f"""You are a helpful, knowledgeable AI assistant. You are also an expert in Indian banking regulations (SEBI, RBI, IRDAI, PFRDA), compliance, and finance.
+    # Step 4: Build a SHORT, token-efficient prompt
+    prompt = f"""You are an AI assistant expert in Indian banking regulations (SEBI, RBI), compliance, and finance. Answer questions clearly, accurately, and helpfully.
 
-Regulatory Context (use only if directly relevant to the question):
+Relevant Policy Context:
 {context_str}
 
-Conversation History:
+Conversation so far:
 {history_str}
 
 User: {user_query}
-
-Instructions:
-- Answer the question directly and conversationally.
-- For greetings ("hi", "hello"), respond warmly and introduce yourself briefly.
-- For compliance/regulatory questions, use the context above and be specific with details.
-- For general questions (coding, math, science, etc.), answer from your knowledge.
-- NEVER paste raw document text. Always synthesize a clear, human answer.
-- Keep answers concise unless the user asks for detail.
-- Do NOT start your answer with "Based on retrieved documents" or similar phrases.
-
 Assistant:"""
 
-    # Step 5: Call Ollama directly via HTTP (more reliable than LangChain wrapper)
+    # Step 5: Call Ollama — with num_ctx=8192 so the question is never truncated
     active_model = get_available_ollama_model()
-    # Simple/short queries get fewer tokens → faster response
-    is_simple = len(user_query.split()) <= 5
-    num_predict = 300 if is_simple else 1024
     answer = ""
     try:
         logger_chat.info(f"Calling Ollama model '{active_model}' for query: {user_query[:60]}")
@@ -334,12 +325,12 @@ Assistant:"""
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0.3,
-                    "num_predict": num_predict,
-                    "num_ctx": 4096
+                    "temperature": 0.4,
+                    "num_predict": 800,  # always allow full answers
+                    "num_ctx": 8192      # large enough to hold prompt + answer
                 }
             },
-            timeout=180  # 3 minutes max
+            timeout=180
         )
         if resp.status_code == 200:
             answer = resp.json().get("response", "").strip()
