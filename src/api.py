@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(__file__))
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 
 from db import get_connection, init_db, log_audit
-from embeddings import search_similar, sync_db_to_chroma, calculate_drift, get_chroma_client, embedder
+from embeddings import search_similar, sync_db_to_vectorstore, calculate_drift, embedder
 from agents import run_agent_pipeline_on_circular, process_all_queued_circulars_with_agents
 from ingestion import run_ingestion
 from processor import run_processing, extract_text_from_pdf
@@ -114,18 +114,23 @@ def get_tickets(
     conn = get_connection()
     cursor = conn.cursor()
     
-    query = "SELECT * FROM compliance_tickets WHERE regulator IN ('SEBI', 'RBI')"
+    query = """
+        SELECT t.*, q.title AS circular_title, q.content AS circular_content, q.source_url_or_path AS circular_url
+        FROM compliance_tickets t
+        LEFT JOIN document_queue q ON CAST(t.circular_id AS TEXT) = CAST(q.id AS TEXT)
+        WHERE t.regulator IN ('SEBI', 'RBI')
+    """
     params = []
     
     if regulator and regulator != "ALL":
-        query += " AND regulator = ?"
+        query += " AND t.regulator = ?"
         params.append(str(regulator))
         
     if priority and priority != "ALL":
-        query += " AND priority LIKE ?"
+        query += " AND t.priority LIKE ?"
         params.append(f"%{str(priority)}%")
 
-    query += " ORDER BY created_at DESC"
+    query += " ORDER BY t.created_at DESC"
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
@@ -135,6 +140,9 @@ def get_tickets(
         tickets.append({
             "ticket_id": r["ticket_id"],
             "circular_id": r["circular_id"],
+            "circular_title": r["circular_title"] or f"{r['regulator']} Circular #{r['circular_id']}",
+            "circular_content": r["circular_content"] or "",
+            "circular_url": r["circular_url"] or "",
             "regulator": r["regulator"],
             "domain": r["domain"],
             "drift_score": r["drift_score"],
@@ -365,33 +373,33 @@ def trigger_pipeline(background_tasks: BackgroundTasks):
         cursor.execute("UPDATE document_queue SET status = 'pending'")
         conn.commit()
         conn.close()
-
         run_ingestion()
         run_processing()
-        sync_db_to_chroma()
+        sync_db_to_vectorstore()
         process_all_queued_circulars_with_agents()
 
     background_tasks.add_task(run_full_pipeline)
-    return {"status": "accepted", "message": "SEBI & RBI compliance pipeline triggered in background."}
+    log_audit("ALL", "FastAPI", "TriggerPipeline", "Pipeline Started", "Triggered SEBI & RBI compliance pipeline in background.")
+    return {"status": "success", "message": "SEBI & RBI Compliance Pipeline started in background."}
 
 @app.post("/api/audit-policy")
-async def audit_internal_policy(
-    policy_name: Optional[str] = Form("Internal Bank Policy"),
-    organization_name: Optional[str] = Form("Bank of India"),
-    policy_text: Optional[str] = Form(None),
-    file: Optional[UploadFile] = File(None)
+async def audit_policy(
+    organization_name: str = Form("Bank of India"),
+    policy_name: str = Form("Internal Policy"),
+    file: Optional[UploadFile] = File(None),
+    policy_text: Optional[str] = Form(None)
 ):
-    """Client Upload Endpoint: Compares uploaded internal organization policy against SEBI & RBI regulations."""
+    """Audit user policy against active SEBI & RBI regulations."""
     extracted_text = ""
 
     if file:
-        temp_path = f"temp_upload_{file.filename}"
+        temp_path = f"data/{file.filename}"
         with open(temp_path, "wb") as f:
             f.write(await file.read())
 
-        if file.filename.lower().endswith(".pdf"):
+        if file.filename.endswith(".pdf"):
             pdf_res = extract_text_from_pdf(temp_path)
-            extracted_text = pdf_res[0] if isinstance(pdf_res, tuple) else pdf_res
+            extracted_text = pdf_res[0] if isinstance(pdf_res, tuple) else str(pdf_res)
         else:
             with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
                 extracted_text = f.read()
@@ -405,39 +413,7 @@ async def audit_internal_policy(
     if not extracted_text:
         raise HTTPException(status_code=400, detail="Please upload a PDF/text file or provide policy text.")
 
-    client = get_chroma_client()
-    try:
-        coll_sebi = client.get_collection(name="sebi_circulars")
-    except Exception:
-        sync_db_to_chroma()
-        coll_sebi = client.get_collection(name="sebi_circulars")
-
-    query_emb = embedder.get_embedding(extracted_text)
-    
-    results = None
-    try:
-        results = coll_sebi.query(query_embeddings=[query_emb], n_results=5)
-    except Exception:
-        results = None
-
-    matched_regulations = []
-    if results and results.get("documents") and len(results["documents"][0]) > 0:
-        docs = results["documents"][0]
-        metas = results["metadatas"][0] if results.get("metadatas") else []
-        dists = results.get("distances", [[]])[0]
-
-        for idx in range(len(docs)):
-            dist = dists[idx] if idx < len(dists) else 0.5
-            similarity = max(0.0, min(1.0, 1.0 - dist if dist <= 1.0 else 1.0 / (1.0 + dist)))
-            regulator = metas[idx].get("regulator", "SEBI/RBI") if idx < len(metas) else "SEBI/RBI"
-            circ_id = metas[idx].get("circular_id", "N/A") if idx < len(metas) else "N/A"
-            
-            matched_regulations.append({
-                "circular_id": circ_id,
-                "regulator": regulator,
-                "text": docs[idx][:250] + ("..." if len(docs[idx]) > 250 else ""),
-                "similarity": round(float(similarity), 4)
-            })
+    matched_regulations = search_similar(query_text=extracted_text, top_k=5)
 
     drift_score = calculate_drift(extracted_text, matched_regulations)
 

@@ -150,7 +150,7 @@ export default function UploadAuditView() {
           style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '0.95rem', background: 'linear-gradient(135deg, #2563EB, #1D4ED8)' }}
         >
           {loading ? <RefreshCw className="animate-spin" size={18} /> : <ShieldCheck size={18} />}
-          {loading ? 'Comparing Policy against Active SEBI & RBI Regulations...' : 'Analyze Policy & Generate Official Audit Report'}
+          {loading ? 'Analyzing Policy against Active SEBI & RBI Directives via Milvus Vector Engine...' : 'Analyze Policy & Generate Official Audit Report'}
         </button>
       </div>
 

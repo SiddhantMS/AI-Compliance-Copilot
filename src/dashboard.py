@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from dotenv import load_dotenv
 
 from db import get_connection, init_db
-from embeddings import search_similar, get_chroma_client, embedder
+from embeddings import search_similar, embedder
 from agents import run_agent_pipeline_on_circular
 
 load_dotenv()

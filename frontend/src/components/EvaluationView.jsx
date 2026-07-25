@@ -90,7 +90,7 @@ export default function EvaluationView() {
           <div style={{ width: '100%', height: '6px', background: '#0A1628', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
             <div style={{ width: `${metrics.faithfulness * 100}%`, height: '100%', background: '#34D399', borderRadius: '3px' }} />
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '6px' }}>Target: $\ge 0.90$ (Grounded in policy)</div>
+          <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: 6 }}>Target SLA: $\ge 0.90$ (Milvus Vector Retrieval)</div>
         </div>
 
         {/* Answer Relevance */}

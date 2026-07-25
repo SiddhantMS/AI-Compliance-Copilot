@@ -1,0 +1,9 @@
+weights:
+  semantic: 0.60
+  keyword: 0.25
+  entity: 0.15
+  domain: 0.10
+  clause: 0.10
+thresholds:
+  low: 0.30
+  medium: 0.70

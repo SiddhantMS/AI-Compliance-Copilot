@@ -11,14 +11,14 @@ from db import init_db, DB_PATH
 from generate_sample_policies import generate_all_sample_bank_policies
 from ingestion import run_ingestion
 from processor import run_processing
-from embeddings import sync_db_to_chroma, VECTORSTORE_DIR
+from embeddings import sync_db_to_vectorstore
 from agents import process_all_queued_circulars_with_agents
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("reset_and_restart")
 
 def reset_database_and_vectorstore():
-    logger.info("=== STEP 1: Deleting existing Database & Vector Store ===")
+    logger.info("=== STEP 1: Deleting existing Database ===")
     
     # Remove SQLite DB
     if os.path.exists(DB_PATH):
@@ -37,14 +37,6 @@ def reset_database_and_vectorstore():
             conn.commit()
             conn.close()
 
-    # Remove ChromaDB store
-    if os.path.exists(VECTORSTORE_DIR):
-        try:
-            shutil.rmtree(VECTORSTORE_DIR)
-            logger.info(f"Removed ChromaDB directory: {VECTORSTORE_DIR}")
-        except Exception as e:
-            logger.warning(f"Could not remove vectorstore directory: {e}")
-
     # Re-init SQLite
     init_db()
     logger.info("Initialized fresh SQLite database schema.")
@@ -61,9 +53,9 @@ def run_fresh_sebi_rbi_pipeline():
     proc_res = run_processing()
     logger.info(f"Processing Result: {proc_res}")
 
-    logger.info("\n=== STEP 5: Syncing Embeddings to ChromaDB (Layer 3) ===")
-    rag_res = sync_db_to_chroma()
-    logger.info(f"ChromaDB Sync Result: {rag_res}")
+    logger.info("\n=== STEP 5: Syncing Embeddings to Milvus Vector Store (Layer 3) ===")
+    rag_res = sync_db_to_vectorstore()
+    logger.info(f"Vector Store Sync Result: {rag_res}")
 
     logger.info("\n=== STEP 6: Executing LangGraph Multi-Agent Pipeline (Layer 4) ===")
     agent_results = process_all_queued_circulars_with_agents()

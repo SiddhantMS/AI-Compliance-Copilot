@@ -196,12 +196,52 @@ def process_circular_pdf(pdf_path: str, circular_id: int):
         f"Extracted {len(extracted_text.split())} words across {len(chunks)} chunks. OCR Fallback: {ocr_used}."
     )
 
-def run_processing():
-    """Batch process pending PDFs in document_queue."""
-    logger.info("=== Running Layer 2 PDF Processing Pipeline ===")
+def process_bank_policies(policy_dir: str = "data/bank_policies"):
+    """Extract and chunk internal Bank of India policy documents into policy_chunks table."""
+    if not os.path.exists(policy_dir):
+        return
+
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, pdf_url, title FROM document_queue WHERE status = 'pending'")
+
+    files = glob.glob(os.path.join(policy_dir, "*.pdf")) + glob.glob(os.path.join(policy_dir, "*.txt"))
+    for file_path in files:
+        doc_name = os.path.basename(file_path)
+        domain = detect_domain(doc_name)
+
+        if file_path.endswith(".pdf"):
+            text, _ = extract_text_from_pdf(file_path)
+        else:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+
+        if not text.strip():
+            continue
+
+        chunks = chunk_text(text)
+        cursor.execute("DELETE FROM policy_chunks WHERE doc_name = ?", (doc_name,))
+
+        for idx, chunk in enumerate(chunks):
+            chunk_id = f"POL_{re.sub(r'[^A-Za-z0-9]', '_', doc_name)}_{idx+1}"
+            cursor.execute("""
+                INSERT INTO policy_chunks (chunk_id, doc_name, domain, text, chunk_index)
+                VALUES (?, ?, ?, ?, ?)
+            """, (chunk_id, doc_name, domain, chunk, idx + 1))
+
+    conn.commit()
+    conn.close()
+    logger.info(f"Ingested {len(files)} Bank of India policy documents into policy_chunks table.")
+
+def run_processing():
+    """Batch process pending PDFs in document_queue and bank policy documents."""
+    logger.info("=== Running Layer 2 PDF Processing Pipeline ===")
+    
+    # First ingest internal Bank of India policies into policy_chunks
+    process_bank_policies("data/bank_policies")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, source_url_or_path AS pdf_url, title, content FROM document_queue WHERE status = 'pending'")
     rows = cursor.fetchall()
     conn.close()
 
@@ -217,9 +257,21 @@ def run_processing():
         if pdf_url and os.path.exists(pdf_url):
             process_circular_pdf(pdf_url, circ_id)
         else:
+            # Process direct text circular content into document_chunks
+            content = r["content"] or title or ""
+            chunks = chunk_text(content)
+            domain = detect_domain(title or "")
+
             conn = get_connection()
             cursor = conn.cursor()
-            cursor.execute("UPDATE document_queue SET status = 'processed' WHERE id = ?", (circ_id,))
+            cursor.execute("DELETE FROM document_chunks WHERE circular_id = ?", (circ_id,))
+            for idx, chunk in enumerate(chunks):
+                chunk_id = f"CIRC_{circ_id}_CHK_{idx+1}"
+                cursor.execute("""
+                    INSERT INTO document_chunks (chunk_id, circular_id, regulator, domain, chunk_index, text)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (chunk_id, circ_id, "SEBI", domain, idx + 1, chunk))
+            cursor.execute("UPDATE document_queue SET status = 'processed', content = ? WHERE id = ?", (content[:2000], circ_id))
             conn.commit()
             conn.close()
 

@@ -12,7 +12,7 @@ from db import init_db
 from generate_sample_policies import generate_all_sample_bank_policies
 from ingestion import run_ingestion
 from processor import run_processing
-from embeddings import sync_db_to_chroma
+from embeddings import sync_db_to_vectorstore
 from agents import process_all_queued_circulars_with_agents
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -37,9 +37,9 @@ def main():
     proc_res = run_processing()
     logger.info(f"Processing Result: {proc_res}")
 
-    # 3. Layer 3: RAG Embeddings & Vector Store Sync
-    logger.info("\n--- LAYER 3: RAG EMBEDDINGS & CHROMADB SYNC ---")
-    rag_res = sync_db_to_chroma()
+    # 3. Layer 3: RAG Embeddings & Milvus Vector Store Sync
+    logger.info("\n--- LAYER 3: RAG EMBEDDINGS & MILVUS VECTOR STORE SYNC ---")
+    rag_res = sync_db_to_vectorstore()
     logger.info(f"RAG Sync Result: {rag_res}")
 
     # 4. Layer 4: LangGraph Multi-Agent Pipeline

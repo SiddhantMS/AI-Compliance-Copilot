@@ -125,17 +125,7 @@ def agent_policy_mapper(state: ComplianceState) -> ComplianceState:
 
 # Conditional Edge Decision Router
 def route_archive_gate(state: ComplianceState) -> str:
-    """Archive gate: If drift_score < 0.40 -> route directly to END (skip Agent 3). Log as archived."""
-    drift_score = state.get("drift_score", 0.0)
-    if drift_score < 0.40:
-        log_audit(
-            state.get("circular_id", "0"),
-            "Archive Gate",
-            "Conditional Routing",
-            "Archived",
-            f"Drift score {drift_score:.4f} < 0.40. Circular routed directly to END. Policy already compliant."
-        )
-        return "END"
+    """Route all circulars to agent_advisor so compliance tickets & drift scores are generated for every circular."""
     return "agent_advisor"
 
 # Agent 3 — Advisor (ONE LLM Call to Ollama via LangChain)

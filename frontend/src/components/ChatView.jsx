@@ -279,7 +279,7 @@ export default function ChatView() {
             <div>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>AI Compliance Assistant</h3>
               <div style={{ fontSize: '0.75rem', color: '#60A5FA', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Zap size={11} /> Powered by Llama 3.1 + Hybrid RAG (ChromaDB × BM25)
+                <Zap size={11} color="#B45309" /> SEBI & RBI Policy RAG Engine (Ollama llama3.1 + Milvus Vector Store) + Hybrid RAG (Milvus × BM25)
               </div>
             </div>
           </div>
