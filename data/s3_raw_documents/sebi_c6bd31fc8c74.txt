@@ -1,0 +1,1 @@
+SEBI circular mandating unclaimed deposits dormant for over 10 years must be transferred to Depositor Education and Awareness (DEA) Fund. Algorithmic trading and treasury execution APIs must maintain strict order rate limits and automated kill switches.

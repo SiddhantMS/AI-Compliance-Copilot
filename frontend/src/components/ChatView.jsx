@@ -1,94 +1,47 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, BookOpen, Trash2, ChevronDown, ChevronUp, Zap, Clock } from 'lucide-react';
+import { Send, Bot, User, BookOpen, Trash2, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8001/api';
+const API_BASE = '/api';
 
 function TypingIndicator({ waitTime }) {
   return (
     <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-      <div style={{ background: 'linear-gradient(135deg, #2563EB, #7C3AED)', padding: '8px', borderRadius: '50%', display: 'flex', flexShrink: 0 }}>
+      <div style={{ background: 'var(--color-primary)', padding: '8px', borderRadius: '50%', display: 'flex', flexShrink: 0 }}>
         <Bot size={16} color="#FFF" />
       </div>
       <div style={{
-        background: '#1E293B',
-        border: '1px solid #334155',
-        borderRadius: '0 12px 12px 12px',
-        padding: '14px 18px',
+        background: '#FFFFFF',
+        border: '1px solid var(--color-border)',
+        borderRadius: '0 6px 6px 6px',
+        padding: '12px 16px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px'
+        gap: '6px',
+        boxShadow: 'var(--shadow-elevation)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#60A5FA', animation: 'bounce 1.2s infinite', animationDelay: '0s', display: 'inline-block' }} />
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#60A5FA', animation: 'bounce 1.2s infinite', animationDelay: '0.2s', display: 'inline-block' }} />
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#60A5FA', animation: 'bounce 1.2s infinite', animationDelay: '0.4s', display: 'inline-block' }} />
-          <span style={{ fontSize: '0.78rem', color: '#64748B', marginLeft: '6px' }}>Generating response...</span>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', animation: 'bounce 1.2s infinite', animationDelay: '0s', display: 'inline-block' }} />
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', animation: 'bounce 1.2s infinite', animationDelay: '0.2s', display: 'inline-block' }} />
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', animation: 'bounce 1.2s infinite', animationDelay: '0.4s', display: 'inline-block' }} />
+          <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginLeft: '4px' }}>AI Assistant is analyzing compliance documents...</span>
         </div>
         {waitTime > 8 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#F59E0B' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>
             <Clock size={11} />
             {waitTime > 40
-              ? `Still working... (${waitTime}s) — Llama 3.1 is a large model, please wait`
-              : `Llama 3.1 is thinking... (~30-60s for first response)`}
+              ? `Processing policy context, please wait... (${waitTime}s)`
+              : `Analyzing regulatory requirements... (${waitTime}s)`}
           </div>
         )}
-        <style>{`@keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }`}</style>
+        <style>{`@keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-4px)} }`}</style>
       </div>
     </div>
   );
 }
 
-function SourcesPanel({ sources }) {
-  const [open, setOpen] = useState(false);
-  if (!sources || sources.length === 0) return null;
-  return (
-    <div style={{ marginTop: '10px' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          background: 'transparent',
-          border: '1px solid #334155',
-          borderRadius: '6px',
-          color: '#60A5FA',
-          fontSize: '0.75rem',
-          padding: '4px 10px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '5px'
-        }}
-      >
-        <BookOpen size={12} />
-        {sources.length} source{sources.length > 1 ? 's' : ''} retrieved
-        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-      </button>
-
-      {open && (
-        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {sources.map((s, i) => (
-            <div key={i} style={{
-              background: 'rgba(15, 23, 42, 0.8)',
-              border: '1px solid #334155',
-              borderRadius: '8px',
-              padding: '10px 12px',
-              fontSize: '0.78rem'
-            }}>
-              <div style={{ color: '#38BDF8', fontWeight: 600, marginBottom: '4px' }}>
-                📄 {s.doc_name || 'Policy Document'}
-                <span style={{ color: '#64748B', fontWeight: 400, marginLeft: '8px' }}>
-                  {s.domain && `Domain: ${s.domain} · `}Similarity: {s.similarity}
-                </span>
-              </div>
-              <div style={{ color: '#94A3B8', lineHeight: 1.5 }}>
-                {(s.text || '').slice(0, 200)}{s.text && s.text.length > 200 ? '...' : ''}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+function SourcesPanel() {
+  return null;
 }
 
 function Message({ msg }) {
@@ -96,38 +49,33 @@ function Message({ msg }) {
   return (
     <div style={{
       display: 'flex',
-      gap: '12px',
+      gap: '10px',
       alignItems: 'flex-start',
-      justifyContent: isUser ? 'flex-end' : 'flex-start',
-      animation: 'fadeIn 0.3s ease'
+      justifyContent: isUser ? 'flex-end' : 'flex-start'
     }}>
-      <style>{`@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }`}</style>
-
       {!isUser && (
         <div style={{
-          background: 'linear-gradient(135deg, #2563EB, #7C3AED)',
+          background: 'var(--color-primary)',
           padding: '8px', borderRadius: '50%', display: 'flex', flexShrink: 0, marginTop: '2px'
         }}>
           <Bot size={16} color="#FFF" />
         </div>
       )}
 
-      <div style={{ maxWidth: '78%' }}>
+      <div style={{ maxWidth: '80%' }}>
         <div style={{
           background: isUser
-            ? 'linear-gradient(135deg, #2563EB, #1D4ED8)'
-            : '#1E293B',
-          color: '#F8FAFC',
+            ? 'var(--color-primary)'
+            : '#FFFFFF',
+          color: isUser ? '#FFFFFF' : 'var(--color-text)',
           padding: '12px 16px',
-          borderRadius: isUser ? '12px 12px 0 12px' : '0 12px 12px 12px',
-          border: isUser ? 'none' : '1px solid #334155',
-          fontSize: '0.92rem',
-          lineHeight: 1.65,
+          borderRadius: isUser ? '6px 6px 0 6px' : '0 6px 6px 6px',
+          border: isUser ? '1px solid var(--color-primary-dark)' : '1px solid var(--color-border)',
+          fontSize: '14px',
+          lineHeight: 1.55,
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
-          boxShadow: isUser
-            ? '0 2px 12px rgba(37,99,235,0.3)'
-            : '0 2px 8px rgba(0,0,0,0.2)'
+          boxShadow: 'var(--shadow-elevation)'
         }}>
           {msg.text}
         </div>
@@ -135,8 +83,8 @@ function Message({ msg }) {
         {!isUser && <SourcesPanel sources={msg.sources} />}
 
         <div style={{
-          fontSize: '0.7rem', color: '#475569', marginTop: '4px',
-          textAlign: isUser ? 'right' : 'left'
+          fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px',
+          fontFamily: 'var(--font-mono)', textAlign: isUser ? 'right' : 'left'
         }}>
           {msg.time}
         </div>
@@ -144,7 +92,7 @@ function Message({ msg }) {
 
       {isUser && (
         <div style={{
-          background: '#334155',
+          background: '#5B6470',
           padding: '8px', borderRadius: '50%', display: 'flex', flexShrink: 0, marginTop: '2px'
         }}>
           <User size={16} color="#FFF" />
@@ -159,10 +107,10 @@ export default function ChatView() {
   const [messages, setMessages] = useState([
     {
       sender: 'bot',
-      text: "👋 Hi! I'm your AI Compliance Assistant powered by Llama 3.1 + Hybrid RAG.\n\nI can answer anything — SEBI/RBI regulations, KYC norms, compliance, penalties, general questions, and more. What would you like to know?",
+      text: "👋 Welcome to the Bank of India AI Compliance Assistant.\n\nAsk any question regarding SEBI and RBI regulatory circulars, internal policy compliance, or audit mandates.",
       sources: [],
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isGreeting: true  // mark so we exclude from history
+      isGreeting: true
     }
   ]);
   const [loading, setLoading] = useState(false);
@@ -171,12 +119,10 @@ export default function ChatView() {
   const inputRef = useRef(null);
   const waitTimerRef = useRef(null);
 
-  // Auto-scroll to latest message
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Wait-time counter for slow model feedback
   useEffect(() => {
     if (loading) {
       setWaitTime(0);
@@ -198,8 +144,6 @@ export default function ChatView() {
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
-    // Build proper {query, answer} PAIRS for multi-turn memory (last 4 turns)
-    // Filter out the initial greeting, then pair user→bot messages
     const realMsgs = messages.filter(m => !m.isGreeting);
     const history = [];
     for (let i = 0; i < realMsgs.length - 1; i++) {
@@ -208,17 +152,17 @@ export default function ChatView() {
           query: realMsgs[i].text,
           answer: realMsgs[i + 1].text
         });
-        i++; // skip the bot message we just consumed
+        i++;
       }
     }
-    const recentHistory = history.slice(-4); // last 4 pairs = 8 messages
+    const recentHistory = history.slice(-4);
 
     try {
       const res = await axios.post(`${API_BASE}/chat`, {
         query: text,
         regulator: 'ALL',
         chat_history: recentHistory
-      }, { timeout: 180000 });  // 3 minutes — Llama 3.1 can be slow
+      }, { timeout: 180000 });
 
       const botNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setMessages(prev => [...prev, {
@@ -230,7 +174,7 @@ export default function ChatView() {
     } catch (err) {
       const botNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const errMsg = err.code === 'ECONNREFUSED' || err.message.includes('Network')
-        ? '⚠️ Cannot connect to backend (port 8001). Please ensure the FastAPI server is running.\n\nRun: `python src/api.py`'
+        ? '⚠️ Cannot connect to backend service. Please ensure the server is running on port 8001.'
         : `⚠️ Error: ${err.response?.data?.detail || err.message}`;
 
       setMessages(prev => [...prev, { sender: 'bot', text: errMsg, sources: [], time: botNow }]);
@@ -258,53 +202,45 @@ export default function ChatView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 140px)', minHeight: '600px' }}>
-      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', padding: 0 }}>
 
         {/* ── Header ── */}
         <div style={{
-          paddingBottom: '14px',
-          borderBottom: '1px solid #334155',
+          padding: '14px 20px',
+          borderBottom: '1px solid var(--color-border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          flexShrink: 0
+          flexShrink: 0,
+          background: '#F7F5F0'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              background: 'linear-gradient(135deg, #2563EB, #7C3AED)',
-              padding: '10px', borderRadius: '12px', display: 'flex'
+              background: 'var(--color-primary)',
+              padding: '8px', borderRadius: '4px', display: 'flex'
             }}>
-              <Bot size={22} color="#FFF" />
+              <Bot size={20} color="#FFF" />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>AI Compliance Assistant</h3>
-              <div style={{ fontSize: '0.75rem', color: '#60A5FA', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Zap size={11} color="#B45309" /> SEBI & RBI Policy RAG Engine (Ollama llama3.1 + Milvus Vector Store) + Hybrid RAG (Milvus × BM25)
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 600, fontFamily: 'var(--font-serif)', color: 'var(--color-primary)' }}>
+                AI Compliance Assistant
+              </h3>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                SEBI & RBI Regulatory Knowledge Retrieval Engine
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
               {messages.length - 1} message{messages.length !== 2 ? 's' : ''}
             </span>
             <button
               onClick={handleClear}
-              title="Clear chat"
-              style={{
-                background: 'rgba(239,68,68,0.1)',
-                border: '1px solid rgba(239,68,68,0.2)',
-                borderRadius: '8px',
-                color: '#F87171',
-                padding: '6px 10px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                fontSize: '0.8rem'
-              }}
+              className="action-btn-secondary"
+              style={{ padding: '4px 8px', fontSize: '12px' }}
             >
-              <Trash2 size={14} /> Clear
+              <Trash2 size={13} /> Clear
             </button>
           </div>
         </div>
@@ -313,36 +249,36 @@ export default function ChatView() {
         <div style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '20px 4px',
+          padding: '20px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px'
+          gap: '16px',
+          background: '#F7F5F0'
         }}>
           {messages.map((msg, idx) => <Message key={idx} msg={msg} />)}
           {loading && <TypingIndicator waitTime={waitTime} />}
           <div ref={bottomRef} />
         </div>
 
-        {/* ── Quick Suggestions (shown when only greeting) ── */}
+        {/* ── Quick Suggestions ── */}
         {messages.length === 1 && (
-          <div style={{ padding: '0 0 12px 0', flexShrink: 0 }}>
-            <div style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '8px' }}>
-              💡 Try asking:
+          <div style={{ padding: '12px 20px', background: '#F7F5F0', borderTop: '1px solid var(--color-border)', flexShrink: 0 }}>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '6px', fontWeight: 600 }}>
+              Suggested Queries:
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {suggestions.map((s, i) => (
                 <button
                   key={i}
                   onClick={() => { setQuery(s); inputRef.current?.focus(); }}
                   style={{
-                    background: 'rgba(59,130,246,0.08)',
-                    border: '1px solid rgba(59,130,246,0.2)',
-                    borderRadius: '20px',
-                    color: '#93C5FD',
-                    padding: '5px 12px',
-                    fontSize: '0.78rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
+                    background: '#FFFFFF',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '4px',
+                    color: 'var(--color-primary)',
+                    padding: '4px 10px',
+                    fontSize: '12px',
+                    cursor: 'pointer'
                   }}
                 >
                   {s}
@@ -354,16 +290,17 @@ export default function ChatView() {
 
         {/* ── Input Bar ── */}
         <div style={{
-          paddingTop: '14px',
-          borderTop: '1px solid #334155',
+          padding: '14px 20px',
+          borderTop: '1px solid var(--color-border)',
           display: 'flex',
           gap: '10px',
+          background: '#FFFFFF',
           flexShrink: 0
         }}>
           <input
             ref={inputRef}
             type="text"
-            placeholder="Ask me anything — regulations, compliance, finance, or anything else..."
+            placeholder="Ask a regulatory compliance or policy query..."
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
@@ -375,13 +312,14 @@ export default function ChatView() {
             className="action-btn"
             onClick={handleSend}
             disabled={loading || !query.trim()}
-            style={{ opacity: (loading || !query.trim()) ? 0.5 : 1, flexShrink: 0 }}
+            style={{ opacity: (loading || !query.trim()) ? 0.55 : 1, flexShrink: 0 }}
           >
-            <Send size={15} />
-            {loading ? 'Thinking...' : 'Send'}
+            <Send size={14} />
+            {loading ? 'Analyzing...' : 'Send'}
           </button>
         </div>
       </div>
     </div>
   );
 }
+

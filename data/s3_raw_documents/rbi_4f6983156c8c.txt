@@ -1,0 +1,1 @@
+RBI directive specifying that credit cards not activated within 30 calendar days from issuance require explicit OTP consent from customer before card setup. Zero customer liability applies for unauthorized electronic transaction reported within 3 working days.

@@ -26,11 +26,21 @@ def calculate_sha256(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 def insert_to_queue(regulator: str, source: str, title: str, content: str) -> bool:
-    """Insert document into document_queue if not duplicate. Returns True if inserted."""
+    """Insert document into document_queue if not duplicate, storing raw file in AWS S3. Returns True if inserted."""
     if regulator not in ["SEBI", "RBI"]:
         return False
 
     sha256_hash = calculate_sha256(content)
+
+    # Store raw document directly in AWS S3 Bucket
+    s3_source = source
+    try:
+        from s3_storage import upload_pdf_to_s3
+        obj_name = f"ingested/{regulator.lower()}_{sha256_hash[:12]}.pdf" if source.endswith(".pdf") else f"ingested/{regulator.lower()}_{sha256_hash[:12]}.txt"
+        s3_source = upload_pdf_to_s3(content.encode('utf-8'), obj_name)
+    except Exception as s3_err:
+        pass
+
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -38,11 +48,11 @@ def insert_to_queue(regulator: str, source: str, title: str, content: str) -> bo
         cursor.execute("""
             INSERT INTO document_queue (status, regulator, source_url_or_path, title, content, sha256_hash, ingested_at)
             VALUES ('pending', ?, ?, ?, ?, ?, ?)
-        """, (regulator, source, title, content, sha256_hash, datetime.utcnow().isoformat()))
+        """, (regulator, s3_source, title, content, sha256_hash, datetime.utcnow().isoformat()))
         conn.commit()
         inserted_id = cursor.lastrowid
         conn.close()
-        log_audit(str(inserted_id), "IngestionPipeline", "Ingest", "New Document", f"Ingested {regulator} document: '{title}' ({source})")
+        log_audit(str(inserted_id), "IngestionPipeline", "Ingest", "New Document", f"Ingested {regulator} document to S3: '{title}' ({s3_source})")
         return True
     except Exception as e:
         conn.close()
@@ -82,6 +92,21 @@ def ingest_sebi() -> dict:
             "title": "Deposit and Treasury Risk Management - Unclaimed Deposits & Algo Kill Switches - SEBI 2026",
             "source": "https://www.sebi.gov.in/legal/circulars/feb-2026/treasury-risk.html",
             "content": "SEBI circular mandating unclaimed deposits dormant for over 10 years must be transferred to Depositor Education and Awareness (DEA) Fund. Algorithmic trading and treasury execution APIs must maintain strict order rate limits and automated kill switches."
+        },
+        {
+            "title": "SEBI Digital Onboarding & Aadhaar Masking Guidelines 2026",
+            "source": "https://www.sebi.gov.in/legal/circulars/feb-2026/digital-onboarding.html",
+            "content": "SEBI circular mandating mandatory masking of first 8 digits of Aadhaar number in storage and electronic transmission. Video KYC sessions must incorporate AI-assisted liveness detection, geotagging verification, and IP address validation."
+        },
+        {
+            "title": "SEBI Structured Digital Database (SDD) for UPSI & Insider Trading Control 2026",
+            "source": "https://www.sebi.gov.in/legal/circulars/jan-2026/sdd-upsi.html",
+            "content": "SEBI mandates maintenance of non-tamperable time-stamped Structured Digital Database (SDD) containing names and PAN of persons sharing Unpublished Price Sensitive Information (UPSI). Audit logs must be preserved for 8 years."
+        },
+        {
+            "title": "SEBI T+0 Instant Settlement & Liquidity Risk Framework 2026",
+            "source": "https://www.sebi.gov.in/legal/circulars/feb-2026/t0-settlement.html",
+            "content": "SEBI operational framework for optional T+0 instant settlement cycle for equity transactions. Clearing corporations must maintain Real-Time Risk Management (RTRM) margin checks and automated collateral validation."
         }
     ]
 
@@ -135,6 +160,31 @@ def ingest_rbi() -> dict:
             "title": "Fair Lending Practice – Penal Charges in Loan Accounts - RBI 2026",
             "source": "https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=12550",
             "content": "RBI guidelines specifying that penalty for non-compliance of loan contract terms shall be levied as penal charges rather than penal interest rate. No capitalization of penal charges permitted."
+        },
+        {
+            "title": "RBI Master Direction on Digital Lending Framework 2026",
+            "source": "https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=12610",
+            "content": "RBI Master Direction mandating that all loan disbursals and repayments must be executed directly between borrower bank account and Regulated Entity (RE) without third-party pool accounts. Standardized Key Fact Statement (KFS) containing All-In Annual Percentage Rate (APR) must be provided prior to loan agreement."
+        },
+        {
+            "title": "RBI Framework for Outsourcing of IT Services & Cloud Management 2026",
+            "source": "https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=12680",
+            "content": "RBI guidelines requiring Regulated Entities to mandate strict data localization within Indian geographic boundaries, execute periodic cloud service provider vulnerability audits, and maintain independent Business Continuity Plan (BCP) failover capabilities."
+        },
+        {
+            "title": "RBI Master Direction on Credit Card and Debit Card Issuance 2026",
+            "source": "https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=12720",
+            "content": "RBI directive specifying that credit cards not activated within 30 calendar days from issuance require explicit OTP consent from customer before card setup. Zero customer liability applies for unauthorized electronic transaction reported within 3 working days."
+        },
+        {
+            "title": "RBI Early Warning Signals (EWS) & Fraud Risk Management 2026",
+            "source": "https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=12790",
+            "content": "RBI Master Direction mandating automated Early Warning Signal (EWS) triggers integrated into core banking systems for credit exposure exceeding Rs 50 Crore. Quarterly fraud monitoring committee reporting required."
+        },
+        {
+            "title": "RBI Operational Risk & Business Continuity RTO Framework 2026",
+            "source": "https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=12830",
+            "content": "RBI operational risk guidelines setting maximum Recovery Time Objective (RTO) of 2 hours for critical banking systems (CBS, NEFT/RTGS gateways, Mobile Banking) and Recovery Point Objective (RPO) near-zero."
         }
     ]
 

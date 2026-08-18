@@ -16,7 +16,7 @@ export default function LoginModal({ isOpen, onClose, currentUser, onLoginSucces
     setError('');
 
     try {
-      const res = await axios.post('http://localhost:8001/api/login', { username, password });
+      const res = await axios.post('/api/login', { username, password });
       onLoginSuccess(res.data);
       onClose();
     } catch (err) {
@@ -32,7 +32,7 @@ export default function LoginModal({ isOpen, onClose, currentUser, onLoginSucces
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('http://localhost:8001/api/login', { username: u, password: p });
+      const res = await axios.post('/api/login', { username: u, password: p });
       onLoginSuccess(res.data);
       onClose();
     } catch (err) {
@@ -45,40 +45,40 @@ export default function LoginModal({ isOpen, onClose, currentUser, onLoginSucces
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(12, 27, 51, 0.6)', backdropFilter: 'blur(4px)',
+      background: 'rgba(11, 61, 102, 0.4)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
     }}>
       <div className="glass-card" style={{
         width: '100%', maxWidth: '440px', background: '#FFFFFF',
-        borderRadius: 16, border: '2px solid #0C1B33', padding: 28,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)', animation: 'fadeIn 0.25s ease'
+        borderRadius: 6, border: '1px solid var(--color-border)', padding: 24,
+        boxShadow: 'var(--shadow-elevation)'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ background: '#0C1B33', padding: 8, borderRadius: 8, color: '#F59E0B' }}>
+            <div style={{ background: '#082A47', padding: 8, borderRadius: 4, color: '#C88A2E' }}>
               <Shield size={20} />
             </div>
             <div>
-              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.15rem', fontWeight: 800, color: '#0C1B33' }}>
+              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.2rem', fontWeight: 600, color: 'var(--color-primary)' }}>
                 Bank of India Portal Sign-In
               </h3>
-              <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Role-Based Access Control (RBAC)</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Role-Based Access Control (RBAC)</div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
             <X size={18} />
           </button>
         </div>
 
         {error && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', padding: '10px 14px', borderRadius: 8, fontSize: '0.8rem', marginBottom: 16 }}>
+          <div style={{ background: '#FDF2F0', border: '1px solid #E8BDB6', color: 'var(--color-risk-high)', padding: '10px 14px', borderRadius: 4, fontSize: '13px', marginBottom: 16 }}>
             {error}
           </div>
         )}
 
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <label style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 700, display: 'block', marginBottom: 4 }}>
+            <label style={{ fontSize: '13px', color: 'var(--color-text-muted)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
               Username
             </label>
             <input
@@ -86,12 +86,13 @@ export default function LoginModal({ isOpen, onClose, currentUser, onLoginSucces
               value={username}
               onChange={e => setUsername(e.target.value)}
               className="search-input"
+              style={{ width: '100%' }}
               required
             />
           </div>
 
           <div>
-            <label style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 700, display: 'block', marginBottom: 4 }}>
+            <label style={{ fontSize: '13px', color: 'var(--color-text-muted)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
               Password
             </label>
             <input
@@ -99,6 +100,7 @@ export default function LoginModal({ isOpen, onClose, currentUser, onLoginSucces
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="search-input"
+              style={{ width: '100%' }}
               required
             />
           </div>
@@ -108,24 +110,24 @@ export default function LoginModal({ isOpen, onClose, currentUser, onLoginSucces
           </button>
         </form>
 
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
-          <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Quick Demo Role Switcher:
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {[
-              { u: 'officer', p: 'officer123', label: 'Compliance Officer', role: 'compliance_officer', badge: '#B45309' },
-              { u: 'auditor', p: 'auditor123', label: 'RBI Auditor (Read-Only)', role: 'auditor', badge: '#059669' },
-              { u: 'admin', p: 'admin123', label: 'System Admin', role: 'admin', badge: '#0C1B33' },
+              { u: 'officer', p: 'officer123', label: 'Compliance Officer', role: 'compliance_officer', badge: 'badge-p2' },
+              { u: 'auditor', p: 'auditor123', label: 'RBI Auditor (Read-Only)', role: 'auditor', badge: 'badge-p3' },
+              { u: 'admin', p: 'admin123', label: 'System Admin', role: 'admin', badge: 'badge-sebi' },
             ].map(r => (
               <button key={r.u} onClick={() => quickSwitch(r.u, r.p)} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 12px', borderRadius: 8, border: '1px solid #E2E8F0',
-                background: currentUser?.username === r.u ? '#F8FAFC' : '#FFFFFF',
-                cursor: 'pointer', textAlign: 'left', fontSize: '0.8rem'
+                padding: '8px 12px', borderRadius: 4, border: '1px solid var(--color-border)',
+                background: currentUser?.username === r.u ? '#F7F5F0' : '#FFFFFF',
+                cursor: 'pointer', textAlign: 'left', fontSize: '13px'
               }}>
-                <span style={{ fontWeight: 600, color: '#0F172A' }}>{r.label}</span>
-                <span className="badge" style={{ background: `${r.badge}15`, color: r.badge, border: `1px solid ${r.badge}40`, fontSize: '0.68rem' }}>
+                <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{r.label}</span>
+                <span className={`badge ${r.badge}`}>
                   {r.u} {currentUser?.username === r.u && <Check size={10} style={{ marginLeft: 2 }} />}
                 </span>
               </button>
@@ -136,3 +138,4 @@ export default function LoginModal({ isOpen, onClose, currentUser, onLoginSucces
     </div>
   );
 }
+

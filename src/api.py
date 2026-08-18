@@ -43,27 +43,32 @@ app.add_middleware(
 
 init_db()
 
+@app.get("/api/health")
+def api_health():
+    return {"status": "online", "model": LLM_MODEL}
+
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1:latest")
 
 def get_available_ollama_model():
-    """Auto-detect the best available Ollama model. Returns the configured model if available, else first text model found."""
+    """Auto-detect available Ollama model, forcing llama3.1 / fast 8B models over 32b models."""
     import requests as _req
+    target_model = os.getenv("LLM_MODEL", "llama3.1").strip()
     try:
-        resp = _req.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        resp = _req.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
         if resp.status_code == 200:
             models = [m["name"] for m in resp.json().get("models", [])]
-            # Filter out embedding-only models
-            text_models = [m for m in models if "embed" not in m.lower()]
-            if LLM_MODEL in text_models:
-                return LLM_MODEL
-            elif text_models:
-                logger_api = logging.getLogger("api")
-                logger_api.warning(f"Configured model '{LLM_MODEL}' not found. Using '{text_models[0]}' instead.")
-                return text_models[0]
+            # Exclude embedding models and heavy 32b models
+            fast_models = [m for m in models if "embed" not in m.lower() and "32b" not in m.lower()]
+            
+            for m in fast_models:
+                if "llama3.1" in m.lower() or target_model.lower() in m.lower():
+                    return m
+            if fast_models:
+                return fast_models[0]
     except Exception:
         pass
-    return LLM_MODEL  # fallback to configured even if check fails
+    return "llama3.1"
 
 CHAT_PROMPT_TEMPLATE = PromptTemplate(
     input_variables=["context", "chat_history", "question"],
@@ -103,6 +108,40 @@ def read_root():
         "system": "Compliance Copilot (SEBI & RBI)",
         "version": "2.0.0",
         "docs": "/docs"
+    }
+
+@app.post("/api/run-pipeline")
+@app.post("/api/pipeline/run")
+def trigger_pipeline(background_tasks: BackgroundTasks):
+    """Trigger the complete Airflow compliance ingestion, processing, vector sync, and agentic pipeline."""
+    def run_full_pipeline_job():
+        logger_pipe = logging.getLogger("pipeline")
+        logger_pipe.info("=== Airflow Pipeline Started via API Trigger ===")
+        try:
+            ingest_res = run_ingestion()
+            logger_pipe.info(f"Task 1 Ingestion Result: {ingest_res}")
+            
+            proc_res = run_processing()
+            logger_pipe.info(f"Task 2 Processing Result: {proc_res}")
+            
+            sync_res = sync_db_to_vectorstore()
+            logger_pipe.info(f"Task 3 Vector Sync Result: {sync_res}")
+            
+            agent_res = process_all_queued_circulars_with_agents()
+            logger_pipe.info(f"Task 4 Agentic Pipeline Completed: Processed {len(agent_res)} circulars.")
+        except Exception as err:
+            logger_pipe.error(f"Airflow Pipeline Execution Failed: {err}")
+
+    background_tasks.add_task(run_full_pipeline_job)
+    return {
+        "status": "triggered",
+        "message": "Airflow compliance pipeline started in background.",
+        "tasks": [
+            "1. SEBI & RBI Ingestion",
+            "2. PDF & OCR Document Processing",
+            "3. Milvus HNSW & BM25 Vector Store Sync",
+            "4. LangGraph Multi-Agent Ticket Generation"
+        ]
     }
 
 @app.get("/api/tickets")
@@ -266,38 +305,131 @@ def get_evaluation():
     """Retrieve current RAGAS framework evaluation metrics."""
     return run_ragas_evaluation()
 
-@app.post("/api/evaluation/run")
-def trigger_evaluation():
+@app.get("/api/evaluation")
+def get_evaluation():
     """Execute RAGAS evaluation benchmark over regulatory test set."""
     return run_ragas_evaluation()
 
+@app.get("/api/patches")
+def list_patches():
+    """Retrieve all pending and approved policy patches."""
+    from policy_patch import get_all_policy_patches
+    return {"patches": get_all_policy_patches()}
+
+class CreatePatchRequest(BaseModel):
+    ticket_id: str
+    policy_name: str
+    original_text: str
+    proposed_patch: str
+
+@app.post("/api/patches/create")
+def create_patch_route(req: CreatePatchRequest):
+    """Create a proposed policy patch for human-in-the-loop review."""
+    from policy_patch import create_policy_patch
+    return create_policy_patch(req.ticket_id, req.policy_name, req.original_text, req.proposed_patch)
+
+class ApprovePatchRequest(BaseModel):
+    patch_id: str
+    reviewer: Optional[str] = "Compliance Officer"
+    updated_text: Optional[str] = None
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/login")
+def login_route(req: LoginRequest):
+    """Authenticate bank user and return signed JWT token."""
+    from auth import authenticate_user, generate_jwt_token
+    user = authenticate_user(req.email, req.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    
+    token = generate_jwt_token(user)
+    return {
+        "status": "success",
+        "access_token": token,
+        "token_type": "bearer",
+        "user": user
+    }
+
+@app.get("/api/auth/me")
+def get_current_user_route(token: Optional[str] = Query(None)):
+    """Validate JWT token and return current user profile."""
+    from auth import decode_jwt_token
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication token missing.")
+    payload = decode_jwt_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired authentication token.")
+    return {"status": "success", "user": payload}
+
+FINANCE_COMPLIANCE_KEYWORDS = {
+    "sebi", "rbi", "kyc", "vcip", "v-cip", "ckycr", "scores", "ombudsman",
+    "cyber", "vapt", "mfa", "soc", "csirt", "incident", "backup", "ransomware",
+    "penal", "penalty", "interest", "loan", "lending", "borrower", "credit",
+    "unclaimed", "deposit", "dea", "algo", "kill switch", "treasury", "trading",
+    "policy", "circular", "directive", "compliance", "audit", "drift", "ticket",
+    "bank", "banking", "finance", "regulatory", "npa", "basel", "repo", "reverse repo",
+    "crr", "slr", "neft", "rtgs", "upi", "imps", "account", "customer", "sop", "guideline"
+}
+
+def is_finance_or_compliance_query(query_text: str) -> bool:
+    """Fast classifier: returns True if query pertains to SEBI/RBI regulations or banking policies."""
+    text_clean = query_text.lower()
+    words = set(re.findall(r'\w+', text_clean))
+    if words & FINANCE_COMPLIANCE_KEYWORDS:
+        return True
+    for term in ["v-cip", "scores 2.0", "kill switch", "bank of india", "penal charge", "dormant account"]:
+        if term in text_clean:
+            return True
+    return False
+
 @app.post("/api/chat")
 def chat_ai(payload: ChatQuery):
-    """RAG Chatbot: retrieves ChromaDB context and generates a real LLM answer via Ollama."""
+    """Smart Intent-Routed RAG Chatbot with Sub-Second Caching:
+    - General/Unrelated queries: Direct-to-LLM (Zero RAG delay)
+    - Compliance queries: RAG Vector Search -> LLM fallback if no match found.
+    """
     logger_chat = logging.getLogger("chat")
     user_query = payload.query.strip()
     if not user_query:
         raise HTTPException(status_code=400, detail="Query string cannot be empty")
 
-    # Step 1: Retrieve relevant context chunks from ChromaDB
-    matched_chunks = search_similar(query_text=user_query, top_k=5)
+    # Check High-Speed Cache for repeat queries
+    cache_key = f"chat_cache:{user_query.lower()}"
+    try:
+        from cache import get_cache, set_cache
+        cached_resp = get_cache(cache_key)
+        if cached_resp:
+            logger_chat.info(f"Cache HIT for query '{user_query[:40]}'. Returning cached response in <5ms.")
+            return cached_resp
+    except Exception:
+        pass
 
-    # Step 2: Build COMPACT context string — truncate chunks to avoid context overflow
-    # Full document text (~3000 tokens) was filling the 4096 token window, leaving no room for the answer.
-    # Now each chunk is capped at 350 chars → ~450 tokens total for all 3 chunks.
-    if matched_chunks:
+    is_compliance = is_finance_or_compliance_query(user_query)
+    matched_chunks = []
+    
+    if is_compliance:
+        logger_chat.info(f"Compliance intent detected for '{user_query[:50]}'. Running RAG vector search...")
+        matched_chunks = search_similar(query_text=user_query, top_k=3)
+    else:
+        logger_chat.info(f"General/Unrelated query detected for '{user_query[:50]}'. Skipping RAG search -> Direct LLM route.")
+
+    # Check top similarity score
+    max_sim = max([m.get("similarity", 0.0) for m in matched_chunks], default=0.0)
+    
+    if matched_chunks and max_sim >= 0.10:
         context_parts = []
-        for i, m in enumerate(matched_chunks[:3], 1):  # max 3 chunks
+        for i, m in enumerate(matched_chunks[:3], 1):
             chunk_text = m.get('text', '').strip()
             snippet = chunk_text[:350] + ('...' if len(chunk_text) > 350 else '')
-            context_parts.append(
-                f"[{i}] {m.get('doc_name', 'Policy')}:\n{snippet}"
-            )
+            context_parts.append(f"[{i}] {m.get('doc_name', 'Policy')}:\n{snippet}")
         context_str = "\n\n".join(context_parts)
     else:
-        context_str = "No documents retrieved."
+        context_str = "No specific internal policy context found. Answer using general knowledge."
 
-    # Step 3: Build conversation history (last 4 turns)
+    # Build conversation history
     history_lines = []
     for turn in (payload.chat_history or [])[-4:]:
         q = turn.get('query', '').strip()
@@ -305,23 +437,31 @@ def chat_ai(payload: ChatQuery):
         if q:
             history_lines.append(f"User: {q}")
         if a:
-            # Truncate long history entries to save context window
             history_lines.append(f"Assistant: {a[:300]}{'...' if len(a) > 300 else ''}")
     history_str = "\n".join(history_lines) if history_lines else "None"
 
-    # Step 4: Build a SHORT, token-efficient prompt
-    prompt = f"""You are an AI assistant expert in Indian banking regulations (SEBI, RBI), compliance, and finance. Answer questions clearly, accurately, and helpfully.
+    # Build prompt based on route
+    if is_compliance and max_sim >= 0.10:
+        prompt = f"""You are an AI assistant expert in Indian banking regulations (SEBI, RBI), compliance, and finance.
+Answer the question accurately using the relevant policy context below where helpful.
 
 Relevant Policy Context:
 {context_str}
 
-Conversation so far:
+Conversation History:
+{history_str}
+
+User: {user_query}
+Assistant:"""
+    else:
+        prompt = f"""You are a helpful, knowledgeable AI assistant. Answer general questions directly, concisely, and accurately.
+
+Conversation History:
 {history_str}
 
 User: {user_query}
 Assistant:"""
 
-    # Step 5: Call Ollama — with num_ctx=8192 so the question is never truncated
     active_model = get_available_ollama_model()
     answer = ""
     try:
@@ -332,13 +472,14 @@ Assistant:"""
                 "model": active_model,
                 "prompt": prompt,
                 "stream": False,
+                "keep_alive": "24h",
                 "options": {
-                    "temperature": 0.4,
-                    "num_predict": 800,  # always allow full answers
-                    "num_ctx": 8192      # large enough to hold prompt + answer
+                    "temperature": 0.2 if is_compliance else 0.4,
+                    "num_predict": 400,
+                    "num_ctx": 2048
                 }
             },
-            timeout=180
+            timeout=60
         )
         if resp.status_code == 200:
             answer = resp.json().get("response", "").strip()
@@ -355,12 +496,21 @@ Assistant:"""
             f"Run in terminal:\n`ollama pull {active_model}`\n`ollama serve`"
         )
 
-    return {
+    result_dict = {
         "query": user_query,
         "answer": answer,
         "sources": matched_chunks,
         "model_used": active_model
     }
+
+    try:
+        from cache import set_cache
+        if answer and not answer.startswith("⚠️"):
+            set_cache(cache_key, result_dict, ttl_seconds=3600)
+    except Exception:
+        pass
+
+    return result_dict
 
 @app.post("/api/pipeline/run")
 def trigger_pipeline(background_tasks: BackgroundTasks):
@@ -382,30 +532,67 @@ def trigger_pipeline(background_tasks: BackgroundTasks):
     log_audit("ALL", "FastAPI", "TriggerPipeline", "Pipeline Started", "Triggered SEBI & RBI compliance pipeline in background.")
     return {"status": "success", "message": "SEBI & RBI Compliance Pipeline started in background."}
 
+@app.get("/api/circulars")
+def get_available_circulars(regulator: Optional[str] = None):
+    """Retrieve list of available SEBI & RBI Master Directions and Circulars for targeted comparison."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if regulator and regulator != "ALL":
+        cursor.execute("SELECT id, regulator, title, source_url_or_path FROM document_queue WHERE regulator = ? ORDER BY id DESC", (regulator,))
+    else:
+        cursor.execute("SELECT id, regulator, title, source_url_or_path FROM document_queue WHERE regulator IN ('SEBI', 'RBI') ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return {"circulars": [dict(r) for r in rows]}
+
 @app.post("/api/audit-policy")
 async def audit_policy(
     organization_name: str = Form("Bank of India"),
     policy_name: str = Form("Internal Policy"),
+    target_regulator: str = Form("ALL"),
+    target_circular_id: str = Form("ALL"),
     file: Optional[UploadFile] = File(None),
     policy_text: Optional[str] = Form(None)
 ):
-    """Audit user policy against active SEBI & RBI regulations."""
+    """Audit user policy against selected SEBI & RBI regulations or specific Master Directions."""
     extracted_text = ""
 
+    upload_dir = os.path.join(os.path.dirname(__file__), "..", "data", "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+
     if file:
-        temp_path = f"data/{file.filename}"
-        with open(temp_path, "wb") as f:
-            f.write(await file.read())
+        temp_path = os.path.join(upload_dir, file.filename)
+        try:
+            file_bytes = await file.read()
+            with open(temp_path, "wb") as f:
+                f.write(file_bytes)
 
-        if file.filename.endswith(".pdf"):
-            pdf_res = extract_text_from_pdf(temp_path)
-            extracted_text = pdf_res[0] if isinstance(pdf_res, tuple) else str(pdf_res)
-        else:
-            with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
-                extracted_text = f.read()
+            # Upload raw file directly to AWS S3 Bucket
+            try:
+                from s3_storage import upload_pdf_to_s3
+                s3_uri = upload_pdf_to_s3(temp_path, f"uploads/{file.filename}")
+                logger_api = logging.getLogger("api")
+                logger_api.info(f"Raw PDF uploaded & stored in AWS S3: {s3_uri}")
+            except Exception as s3_err:
+                logger_api = logging.getLogger("api")
+                logger_api.warning(f"S3 Upload Notice: {s3_err}")
 
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+            if file.filename.lower().endswith(".pdf"):
+                pdf_res = extract_text_from_pdf(temp_path)
+                extracted_text = pdf_res[0] if isinstance(pdf_res, tuple) else str(pdf_res)
+            else:
+                with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
+                    extracted_text = f.read()
+        except Exception as upload_err:
+            logger_api = logging.getLogger("api")
+            logger_api.error(f"Error reading uploaded file '{file.filename}': {upload_err}")
+            raise HTTPException(status_code=500, detail=f"Failed to process file: {str(upload_err)}")
+        finally:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
 
     elif policy_text:
         extracted_text = policy_text.strip()
@@ -413,7 +600,31 @@ async def audit_policy(
     if not extracted_text:
         raise HTTPException(status_code=400, detail="Please upload a PDF/text file or provide policy text.")
 
-    matched_regulations = search_similar(query_text=extracted_text, top_k=5)
+    # Retrieve matched policy chunks
+    all_matched = search_similar(query_text=extracted_text, top_k=8)
+
+    # Filter matched chunks based on target_regulator and target_circular_id
+    matched_regulations = []
+    if target_circular_id and target_circular_id != "ALL":
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT title, content, regulator FROM document_queue WHERE id = ?", (target_circular_id,))
+        specific_circ = cursor.fetchone()
+        conn.close()
+        if specific_circ:
+            matched_regulations = [{
+                "doc_name": f"{specific_circ['regulator']} — {specific_circ['title']}",
+                "regulator": specific_circ['regulator'],
+                "domain": "Target Regulation",
+                "text": specific_circ['content'],
+                "similarity": 0.85
+            }]
+    elif target_regulator and target_regulator != "ALL":
+        matched_regulations = [m for m in all_matched if m.get("regulator", "SEBI") == target_regulator or target_regulator in m.get("doc_name", "")]
+        if not matched_regulations:
+            matched_regulations = all_matched[:4]
+    else:
+        matched_regulations = all_matched[:5]
 
     drift_score = calculate_drift(extracted_text, matched_regulations)
 
@@ -452,7 +663,7 @@ async def audit_policy(
     }
 
     action_items = [
-        f"Review internal policy clauses against matched {matched_regulations[0]['regulator'] if matched_regulations else 'SEBI/RBI'} circular provisions.",
+        f"Review internal policy clauses against matched {matched_regulations[0].get('regulator', 'SEBI/RBI') if matched_regulations else 'SEBI/RBI'} circular provisions.",
         "Formulate internal compliance task force to update mandatory operational controls.",
         "Submit revised policy draft to Executive Risk Committee for sign-off and file regulatory compliance confirmation."
     ]

@@ -1,0 +1,1 @@
+SEBI mandates 24x7 SOC operations, multi-factor authentication (MFA) for trading portals, zero-trust network architecture, quarterly vulnerability assessment and penetration testing (VAPT), offline immutable backups, and immediate reporting of cyber incidents within 6 hours.

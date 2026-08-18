@@ -49,10 +49,14 @@ export default function AuditView({ auditLogs = [], loading }) {
       <div className="glass-card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <History size={22} color="#38BDF8" />
+            <History size={22} color="var(--color-primary)" />
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>RBI & SEBI Inspectable Audit Trail Log</h3>
-              <div style={{ fontSize: '0.78rem', color: '#64748B' }}>Immutable Agentic Decision Log ({auditLogs.length} entries recorded)</div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 600, fontFamily: 'var(--font-serif)', color: 'var(--color-primary)' }}>
+                RBI & SEBI Inspectable Audit Trail Log
+              </h3>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                Agent Decision Log (<span style={{ fontFamily: 'var(--font-mono)' }}>{auditLogs.length}</span> entries recorded)
+              </div>
             </div>
           </div>
 
@@ -61,26 +65,25 @@ export default function AuditView({ auditLogs = [], loading }) {
             <select
               value={agentFilter}
               onChange={(e) => setAgentFilter(e.target.value)}
-              style={{ background: '#0A1628', border: '1px solid #1E3A5F', color: '#F8FAFC', borderRadius: '8px', padding: '7px 12px', fontSize: '0.8rem' }}
             >
               {agents.map(a => <option key={a} value={a}>{a === 'ALL' ? 'All Agent Nodes' : a}</option>)}
             </select>
 
             {/* Search Box */}
             <div style={{ position: 'relative', width: '220px' }}>
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#64748B' }} />
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
               <input 
                 type="text"
                 placeholder="Search audit logs..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
-                style={{ paddingLeft: '32px', fontSize: '0.82rem', padding: '7px 10px 7px 32px' }}
+                style={{ paddingLeft: '32px', width: '100%' }}
               />
             </div>
 
             {/* Export CSV */}
-            <button className="action-btn" onClick={exportCSV} style={{ background: '#1E3A5F', padding: '7px 14px', fontSize: '0.82rem' }}>
+            <button className="action-btn-secondary" onClick={exportCSV}>
               <Download size={14} /> Export CSV
             </button>
           </div>
@@ -89,16 +92,16 @@ export default function AuditView({ auditLogs = [], loading }) {
 
       {/* ── Audit Logs Table ── */}
       {loading ? (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '40px', color: '#64748B' }}>Loading audit trail...</div>
+        <div className="glass-card" style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>Loading audit trail...</div>
       ) : filteredLogs.length === 0 ? (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '40px', color: '#64748B', fontSize: '0.88rem' }}>
+        <div className="glass-card" style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)', fontSize: '14px' }}>
           No audit logs matching search query.
         </div>
       ) : (
         <div className="glass-card" style={{ overflowX: 'auto', padding: '0' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px', textAlign: 'left' }}>
             <thead>
-              <tr style={{ background: '#0A1628', color: '#64748B', borderBottom: '1px solid #1E3A5F' }}>
+              <tr style={{ background: '#F7F5F0', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', fontSize: '13px' }}>
                 <th style={{ padding: '12px 16px' }}>Log ID</th>
                 <th style={{ padding: '12px 16px' }}>Timestamp</th>
                 <th style={{ padding: '12px 16px' }}>Circular ID</th>
@@ -109,21 +112,21 @@ export default function AuditView({ auditLogs = [], loading }) {
             </thead>
             <tbody>
               {filteredLogs.slice(0, 100).map((log) => (
-                <tr key={log.id} style={{ borderBottom: '1px solid rgba(30,58,95,0.4)' }}>
-                  <td style={{ padding: '12px 16px', color: '#475569', fontFamily: 'monospace' }}>#{log.id}</td>
-                  <td style={{ padding: '12px 16px', color: '#64748B', fontSize: '0.78rem' }}>{log.timestamp ? log.timestamp.split('T')[0] : ''}</td>
-                  <td style={{ padding: '12px 16px', fontFamily: 'monospace', color: '#60A5FA', fontWeight: 600 }}>{log.circular_id}</td>
-                  <td style={{ padding: '12px 16px', fontWeight: 600, color: '#F8FAFC' }}>
-                    <span style={{ background: 'rgba(59,130,246,0.1)', color: '#60A5FA', padding: '3px 10px', borderRadius: '6px', border: '1px solid rgba(59,130,246,0.2)', fontSize: '0.75rem' }}>
+                <tr key={log.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <td style={{ padding: '12px 16px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>#{log.id}</td>
+                  <td style={{ padding: '12px 16px', color: 'var(--color-text-muted)', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>{log.timestamp ? log.timestamp.split('T')[0] : ''}</td>
+                  <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', fontWeight: 600 }}>{log.circular_id}</td>
+                  <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--color-text)' }}>
+                    <span style={{ background: '#EFF6FC', color: '#1D5B8C', padding: '2px 8px', borderRadius: '4px', border: '1px solid #B5D3EC', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
                       {log.agent_name}
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <span style={{ background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '4px', color: '#CBD5E1', fontSize: '0.78rem' }}>
+                    <span style={{ background: '#F7F5F0', padding: '2px 8px', borderRadius: '3px', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: '12px' }}>
                       {log.action}
                     </span>
                   </td>
-                  <td style={{ padding: '12px 16px', color: '#CBD5E1', maxWidth: '450px', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.5 }}>
+                  <td style={{ padding: '12px 16px', color: 'var(--color-text)', maxWidth: '450px', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.4, fontSize: '13px' }}>
                     {log.details}
                   </td>
                 </tr>
@@ -135,3 +138,4 @@ export default function AuditView({ auditLogs = [], loading }) {
     </div>
   );
 }
+

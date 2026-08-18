@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("agents")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:14b")
+LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1")
 
 class ComplianceState(TypedDict):
     circular_id: str
@@ -236,6 +236,23 @@ Return JSON only:"""
         "Generated Ticket",
         f"Ticket {ticket_id} created for {regulator} ({domain}). Priority: {priority}, Summary: {summary[:100]}..."
     )
+
+    # Trigger Automated P1 Alerting for High Priority Tickets
+    if "HIGH" in priority.upper() or "P1" in priority.upper():
+        try:
+            from alerting import trigger_p1_alert_pipeline
+            alert_ticket_data = {
+                "ticket_id": ticket_id,
+                "regulator": regulator,
+                "domain": domain,
+                "drift_score": drift_score,
+                "priority": priority,
+                "summary": summary,
+                "affected_policies": affected_policies
+            }
+            trigger_p1_alert_pipeline(alert_ticket_data)
+        except Exception as alert_err:
+            logger.warning(f"P1 Alert Dispatch Failed: {alert_err}")
 
     state["summary"] = summary
     state["change_list"] = change_list

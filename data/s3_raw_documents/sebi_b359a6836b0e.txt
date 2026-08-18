@@ -1,0 +1,1 @@
+SEBI operational framework for optional T+0 instant settlement cycle for equity transactions. Clearing corporations must maintain Real-Time Risk Management (RTRM) margin checks and automated collateral validation.

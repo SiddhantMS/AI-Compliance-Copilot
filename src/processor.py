@@ -2,7 +2,7 @@ import os
 import re
 import glob
 import fitz  # PyMuPDF
-import pytesseract
+import numpy as np
 from PIL import Image
 import io
 import json
@@ -17,6 +17,42 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("processor")
 
 _nlp = None
+_paddle_ocr = None
+
+def get_paddle_ocr():
+    """Lazy initialize PaddleOCR Engine for deep learning text recognition."""
+    global _paddle_ocr
+    if _paddle_ocr is None:
+        try:
+            from paddleocr import PaddleOCR
+            _paddle_ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
+            logger.info("✓ PaddleOCR Engine initialized successfully.")
+        except Exception as e:
+            logger.warning(f"PaddleOCR init notice (falling back to PyMuPDF digital text): {e}")
+            _paddle_ocr = "fallback"
+    return _paddle_ocr
+
+def run_paddle_ocr_on_image(pil_img: Image.Image) -> str:
+    """Run PaddleOCR on PIL image and return recognized text string."""
+    ocr_engine = get_paddle_ocr()
+    if ocr_engine == "fallback" or ocr_engine is None:
+        return ""
+    
+    try:
+        img_np = np.array(pil_img.convert('RGB'))
+        result = ocr_engine.ocr(img_np, cls=True)
+        text_lines = []
+        if result and len(result) > 0 and result[0]:
+            for line in result[0]:
+                if len(line) >= 2 and len(line[1]) >= 1:
+                    text_str = line[1][0]
+                    confidence = line[1][1] if len(line[1]) > 1 else 1.0
+                    if confidence > 0.4 and text_str.strip():
+                        text_lines.append(text_str.strip())
+        return " ".join(text_lines)
+    except Exception as err:
+        logger.warning(f"PaddleOCR image extraction notice: {err}")
+        return ""
 
 def get_nlp():
     global _nlp
@@ -49,7 +85,7 @@ def detect_domain(text_or_filename: str) -> str:
     return "General BFSI"
 
 def extract_text_from_pdf(pdf_path: str) -> tuple[str, bool]:
-    """Extract text from PDF using PyMuPDF + Page-Level Embedded Image OCR for mixed PDFs.
+    """Extract text from PDF using PyMuPDF + PaddleOCR Deep Learning Engine for scanned/mixed PDFs.
     Returns tuple of (extracted_text, ocr_used_boolean).
     """
     filename = os.path.basename(pdf_path)
@@ -70,17 +106,15 @@ def extract_text_from_pdf(pdf_path: str) -> tuple[str, bool]:
                     try:
                         base_image = doc.extract_image(xref)
                         image_bytes = base_image["image"]
-                        image_ext = base_image["ext"]
-                        
                         pil_img = Image.open(io.BytesIO(image_bytes))
-                        ocr_res = pytesseract.image_to_string(pil_img).strip()
+                        ocr_res = run_paddle_ocr_on_image(pil_img)
                         if ocr_res and len(ocr_res.split()) >= 3:
-                            image_ocr_text += "\n[Embedded Image OCR]: " + ocr_res + "\n"
+                            image_ocr_text += "\n[PaddleOCR Embedded Image]: " + ocr_res + "\n"
                             ocr_used = True
                     except Exception:
                         pass
 
-            # Combine page digital text + page embedded image OCR text
+            # Combine page digital text + page embedded image PaddleOCR text
             page_combined = page_text + ("\n" + image_ocr_text if image_ocr_text else "")
             
             # Page-level full rendering fallback if page has zero digital text and images
@@ -88,9 +122,9 @@ def extract_text_from_pdf(pdf_path: str) -> tuple[str, bool]:
                 try:
                     pix = page.get_pixmap(dpi=300)
                     img_bytes = pix.tobytes("png")
-                    full_page_ocr = pytesseract.image_to_string(Image.open(io.BytesIO(img_bytes)))
+                    full_page_ocr = run_paddle_ocr_on_image(Image.open(io.BytesIO(img_bytes)))
                     if full_page_ocr.strip():
-                        page_combined = "\n[Full Page OCR]: " + full_page_ocr.strip() + "\n"
+                        page_combined = "\n[PaddleOCR Full Page]: " + full_page_ocr.strip() + "\n"
                         ocr_used = True
                 except Exception:
                     pass
@@ -162,7 +196,7 @@ def chunk_text(text: str, chunk_size_words: int = 400, overlap_words: int = 50) 
     return chunks
 
 def process_circular_pdf(pdf_path: str, circular_id: int):
-    """Extract text and chunk PDF circular into document_chunks table."""
+    """Extract text and chunk PDF circular into document_chunks table, streaming from S3 if s3:// URI."""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -171,8 +205,26 @@ def process_circular_pdf(pdf_path: str, circular_id: int):
     regulator = row["regulator"] if row else "SEBI"
     domain = row["domain"] if row else detect_domain(pdf_path)
 
-    extracted_text, ocr_used = extract_text_from_pdf(pdf_path)
+    actual_pdf_path = pdf_path
+    temp_download = None
+
+    if pdf_path.startswith("s3://"):
+        try:
+            from s3_storage import download_pdf_from_s3
+            temp_download = os.path.join(os.path.dirname(__file__), "..", "data", "uploads", f"s3_temp_{circular_id}.pdf")
+            if download_pdf_from_s3(pdf_path, temp_download):
+                actual_pdf_path = temp_download
+        except Exception as s3_dl_err:
+            logger.warning(f"Failed to stream S3 PDF '{pdf_path}': {s3_dl_err}")
+
+    extracted_text, ocr_used = extract_text_from_pdf(actual_pdf_path)
     chunks = chunk_text(extracted_text)
+
+    if temp_download and os.path.exists(temp_download):
+        try:
+            os.remove(temp_download)
+        except Exception:
+            pass
 
     cursor.execute("DELETE FROM document_chunks WHERE circular_id = ?", (circular_id,))
     

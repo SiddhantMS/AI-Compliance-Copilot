@@ -1,0 +1,1 @@
+SEBI mandates maintenance of non-tamperable time-stamped Structured Digital Database (SDD) containing names and PAN of persons sharing Unpublished Price Sensitive Information (UPSI). Audit logs must be preserved for 8 years.

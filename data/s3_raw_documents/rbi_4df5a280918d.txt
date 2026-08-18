@@ -1,0 +1,1 @@
+RBI circular directing all commercial banks to maintain immutable offline backups, implement micro-segmentation of critical network segments, quarterly VAPT, and report cybersecurity incidents to CSIRT-Fin within 6 hours.

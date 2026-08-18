@@ -1,0 +1,1 @@
+RBI operational risk guidelines setting maximum Recovery Time Objective (RTO) of 2 hours for critical banking systems (CBS, NEFT/RTGS gateways, Mobile Banking) and Recovery Point Objective (RPO) near-zero.

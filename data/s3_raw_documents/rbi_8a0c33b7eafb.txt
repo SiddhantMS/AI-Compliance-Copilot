@@ -1,0 +1,1 @@
+RBI guidelines requiring Regulated Entities to mandate strict data localization within Indian geographic boundaries, execute periodic cloud service provider vulnerability audits, and maintain independent Business Continuity Plan (BCP) failover capabilities.

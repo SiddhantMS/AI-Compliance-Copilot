@@ -1,0 +1,1 @@
+SEBI circular mandating mandatory masking of first 8 digits of Aadhaar number in storage and electronic transmission. Video KYC sessions must incorporate AI-assisted liveness detection, geotagging verification, and IP address validation.

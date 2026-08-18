@@ -436,7 +436,7 @@ Instructions:
 - Keep answers concise unless asked for detail.
 
 Assistant:"""
-                        llm_model = os.getenv("LLM_MODEL", "qwen2.5:14b")
+                        llm_model = os.getenv("LLM_MODEL", "llama3.1")
                         ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
                         llm = OllamaLLM(model=llm_model, base_url=ollama_url, temperature=0.3)
                         answer = llm.invoke(prompt).strip()
